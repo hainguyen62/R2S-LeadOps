@@ -31,28 +31,42 @@ export const sources = [
   { name: "Google Form", value: 24 },
 ];
 
+// Luồng trạng thái lead chính thức (đúng Mục V.3 tài liệu Kế hoạch triển khai):
+// Lead mới → Đã liên hệ → Đang tư vấn → Đang cân nhắc → Đã đặt cọc → Đã đăng ký
+// Dùng mảng này ở mọi nơi cần hiển thị/lựa chọn trạng thái theo đúng thứ tự luồng
+// (dropdown lọc, dropdown cập nhật trạng thái...) thay vì suy ra từ dữ liệu hiện có.
+export const leadStatusOrder = [
+  "Lead mới",
+  "Đã liên hệ",
+  "Đang tư vấn",
+  "Đang cân nhắc",
+  "Đã đặt cọc",
+  "Đã đăng ký",
+];
+
 export const funnel = [
   { name: "Lead mới", value: 248, pct: "100%", fill: "#3b82f6" },
   { name: "Đã liên hệ", value: 154, pct: "62%", fill: "#22c55e" },
   { name: "Đang tư vấn", value: 66, pct: "27%", fill: "#eab308" },
-  { name: "Đã đặt cọc", value: 28, pct: "11%", fill: "#f97316" },
+  { name: "Đang cân nhắc", value: 40, pct: "16%", fill: "#f97316" },
+  { name: "Đã đặt cọc", value: 28, pct: "11%", fill: "#7e57c2" },
   { name: "Đã đăng ký", value: 18, pct: "7%", fill: "#a855f7" },
 ];
 
 export const statusStyle = {
-  "Đang tư vấn": "bg-blue-50 text-blue-800",
-  "Lead mới": "bg-slate-100 text-slate-700",
-  "Đã đăng ký": "bg-emerald-50 text-emerald-800",
-  "Chờ xử lý": "bg-amber-50 text-amber-800",
-  "Đã liên hệ": "bg-cyan-50 text-cyan-800",
-  "Đã đặt cọc": "bg-orange-50 text-orange-800",
+  "Lead mới": "bg-slate-100 text-slate-600",
+  "Đã liên hệ": "bg-cyan-50 text-cyan-700",
+  "Đang tư vấn": "bg-blue-50 text-blue-700",
+  "Đang cân nhắc": "bg-amber-50 text-amber-700",
+  "Đã đặt cọc": "bg-orange-50 text-orange-700",
+  "Đã đăng ký": "bg-emerald-50 text-emerald-700",
 };
 
 export const classStyle = {
-  "Lead nóng": "bg-red-50 text-red-800",
-  "Lead ấm": "bg-amber-50 text-amber-800",
-  "Lead lạnh": "bg-blue-50 text-blue-800",
-  "Không hợp lệ": "bg-slate-100 text-slate-600",
+  "Lead nóng": "bg-red-50 text-red-700",
+  "Lead ấm": "bg-amber-50 text-amber-700",
+  "Lead lạnh": "bg-blue-50 text-blue-700",
+  "Không hợp lệ": "bg-slate-100 text-slate-500",
 };
 
 // Mỗi lead có `signals` — tập hợp các tín hiệu hành vi/thông tin thực tế
@@ -104,7 +118,7 @@ export const leads = [
     },
   },
   {
-    id: 5, name: "Võ Hoàng Nam", course: "Data Analyst", source: "Facebook", status: "Chờ xử lý",
+    id: 5, name: "Võ Hoàng Nam", course: "Data Analyst", source: "Facebook", status: "Đang cân nhắc",
     date: "12/05/2026 08:12", phone: "0905 678 901", email: "hoangnam@gmail.com", assignee: "Tư vấn viên A",
     facebook: "https://facebook.com/hoangnam.vo",
     signals: {
@@ -157,7 +171,7 @@ export const leads = [
     },
   },
   {
-    id: 10, name: "Phan Quốc An", course: "Data Analyst", source: "TikTok", status: "Chờ xử lý",
+    id: 10, name: "Phan Quốc An", course: "Data Analyst", source: "TikTok", status: "Đang cân nhắc",
     date: "11/05/2026 16:12", phone: "0910 123 456", email: "quocan@gmail.com", assignee: "Tư vấn viên B",
     tiktok: "https://tiktok.com/@quocan.phan",
     signals: {
