@@ -1,0 +1,315 @@
+import { useMemo, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import {
+  ArrowLeft,
+  GitBranch,
+  Users,
+  Flame,
+  Wallet,
+  GraduationCap,
+  TrendingUp,
+  Check,
+} from "lucide-react";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import { campaigns, campaignTrends } from "../data/mockData.js";
+
+const tooltipStyle = {
+  background: "#ffffff",
+  border: "1px solid #e2e8f0",
+  borderRadius: 12,
+  fontSize: 12,
+  color: "#111827",
+  boxShadow: "0 8px 24px rgba(15,23,42,0.14)",
+  padding: "8px 12px",
+};
+
+export default function CampaignDetails() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const campaign = campaigns.find((c) => String(c.id) === id);
+
+  const [form, setForm] = useState(() =>
+    campaign
+      ? {
+          name: campaign.name,
+          course: campaign.course || "",
+          source: campaign.source || "",
+          status: campaign.status || "Đang chạy",
+          budget: campaign.budget || "",
+          start: campaign.start || "",
+          end: campaign.end || "",
+          utmSource: campaign.utmSource || "",
+          utmMedium: campaign.utmMedium || "",
+          utmCampaign: campaign.utmCampaign || "",
+          utmContent: campaign.utmContent || "",
+          utmTerm: campaign.utmTerm || "",
+        }
+      : null
+  );
+  const [savedMsg, setSavedMsg] = useState("");
+
+  const trend = campaignTrends[campaign?.id] || [];
+  const conversionRate = useMemo(() => {
+    if (!campaign || !campaign.leads) return "0%";
+    return `${Math.round((campaign.registrations / campaign.leads) * 100)}%`;
+  }, [campaign]);
+
+  if (!campaign || !form) {
+    return (
+      <div className="space-y-4">
+        <button
+          onClick={() => navigate("/campaigns")}
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
+        >
+          <ArrowLeft size={16} /> Quay lại danh sách chiến dịch
+        </button>
+        <div className="bg-white border border-slate-200 rounded-xl p-10 text-center text-sm text-slate-500 shadow-card">
+          Không tìm thấy chiến dịch này.
+        </div>
+      </div>
+    );
+  }
+
+  const handleSave = (e) => {
+    e.preventDefault();
+    Object.assign(campaign, form);
+    setSavedMsg("Đã lưu thay đổi chiến dịch.");
+    setTimeout(() => setSavedMsg(""), 2500);
+  };
+
+  const statCards = [
+    { label: "Số lead", value: campaign.leads, icon: Users, tint: "bg-blue-50 text-blue-600" },
+    { label: "Lead nóng", value: campaign.hotLeads, icon: Flame, tint: "bg-orange-50 text-orange-600" },
+    { label: "Đã đặt cọc", value: campaign.deposits, icon: Wallet, tint: "bg-violet-50 text-violet-600" },
+    { label: "Đã đăng ký", value: campaign.registrations, icon: GraduationCap, tint: "bg-emerald-50 text-emerald-600" },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <button
+        onClick={() => navigate("/campaigns")}
+        className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
+      >
+        <ArrowLeft size={16} /> Quay lại danh sách chiến dịch
+      </button>
+
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+            <GitBranch size={22} />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">{campaign.name}</h2>
+            <p className="text-sm text-slate-500">Nguồn: {campaign.source}</p>
+          </div>
+        </div>
+        <span
+          className={`text-xs px-3 py-1.5 rounded-full font-medium ${
+            campaign.status === "Đang chạy" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"
+          }`}
+        >
+          {campaign.status}
+        </span>
+      </div>
+
+      {savedMsg && (
+        <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2.5">
+          <Check size={15} /> {savedMsg}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* ---- Cột trái: Form thông tin chiến dịch + UTM ---- */}
+        <form onSubmit={handleSave} className="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-5 shadow-card space-y-3 h-fit">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Thông tin chiến dịch</p>
+          <div>
+            <label className="text-xs text-slate-500 block mb-1">Tên chiến dịch</label>
+            <input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Khóa học</label>
+              <input
+                value={form.course}
+                onChange={(e) => setForm({ ...form, course: e.target.value })}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Nguồn</label>
+              <input
+                value={form.source}
+                onChange={(e) => setForm({ ...form, source: e.target.value })}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Ngày bắt đầu</label>
+              <input
+                type="date"
+                value={form.start}
+                onChange={(e) => setForm({ ...form, start: e.target.value })}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Ngày kết thúc</label>
+              <input
+                type="date"
+                value={form.end}
+                onChange={(e) => setForm({ ...form, end: e.target.value })}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Ngân sách (VNĐ)</label>
+              <input
+                value={form.budget}
+                onChange={(e) => setForm({ ...form, budget: e.target.value })}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Trạng thái</label>
+              <select
+                value={form.status}
+                onChange={(e) => setForm({ ...form, status: e.target.value })}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+              >
+                <option>Đang chạy</option>
+                <option>Tạm dừng</option>
+                <option>Kết thúc</option>
+              </select>
+            </div>
+          </div>
+
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide pt-2">Thông số UTM</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">UTM Source</label>
+              <input
+                value={form.utmSource}
+                onChange={(e) => setForm({ ...form, utmSource: e.target.value })}
+                placeholder="facebook"
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">UTM Medium</label>
+              <input
+                value={form.utmMedium}
+                onChange={(e) => setForm({ ...form, utmMedium: e.target.value })}
+                placeholder="cpc"
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 block mb-1">UTM Campaign</label>
+            <input
+              value={form.utmCampaign}
+              onChange={(e) => setForm({ ...form, utmCampaign: e.target.value })}
+              placeholder="java-backend-t5"
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">UTM Content</label>
+              <input
+                value={form.utmContent}
+                onChange={(e) => setForm({ ...form, utmContent: e.target.value })}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">UTM Term</label>
+              <input
+                value={form.utmTerm}
+                onChange={(e) => setForm({ ...form, utmTerm: e.target.value })}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+          </div>
+
+          <div className="pt-2">
+            <button type="submit" className="w-full bg-brand-600 hover:bg-brand-500 rounded-lg py-2 text-sm text-white">
+              Lưu thay đổi
+            </button>
+          </div>
+        </form>
+
+        {/* ---- Cột phải: Số liệu hiệu quả + biểu đồ xu hướng ---- */}
+        <div className="lg:col-span-3 space-y-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {statCards.map((s) => {
+              const Icon = s.icon;
+              return (
+                <div key={s.label} className="bg-white border border-slate-200 rounded-xl p-4 shadow-card">
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-2 ${s.tint}`}>
+                    <Icon size={16} />
+                  </div>
+                  <p className="text-xl font-semibold text-slate-900">{s.value}</p>
+                  <p className="text-[11px] text-slate-500">{s.label}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-card">
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingUp size={14} className="text-brand-600" />
+              <p className="text-sm font-medium text-slate-800">Tỷ lệ chuyển đổi (Đăng ký / Lead)</p>
+            </div>
+            <p className="text-3xl font-semibold text-brand-600">{conversionRate}</p>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-card">
+            <p className="text-sm font-semibold text-slate-900 mb-4">Xu hướng lead theo thời gian</p>
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart data={trend} margin={{ left: -20, right: 10, top: 10 }}>
+                <defs>
+                  <linearGradient id="campaignTrendArea" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2563EB" stopOpacity={0.15} />
+                    <stop offset="100%" stopColor="#2563EB" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="#e2e8f0" vertical={false} />
+                <XAxis dataKey="day" tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={{ stroke: "#e5e7eb" }} tickLine={false} />
+                <YAxis tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Area
+                  type="linear"
+                  dataKey="value"
+                  stroke="#2563EB"
+                  strokeWidth={3}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="url(#campaignTrendArea)"
+                  dot={{ r: 3, fill: "#2563EB", stroke: "#fff", strokeWidth: 2 }}
+                  activeDot={{ r: 6, fill: "#2563eb", stroke: "#fff", strokeWidth: 3 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,127 @@
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
+import { Bell, Flame, Clock, Info, UserPlus, CheckCheck } from "lucide-react";
+import { notifications as initialNotifications } from "../../data/mockData.js";
+
+const typeConfig = {
+  "hot-lead": { icon: Flame, tint: "bg-orange-50 text-orange-600" },
+  followup: { icon: Clock, tint: "bg-red-50 text-red-600" },
+  assign: { icon: UserPlus, tint: "bg-blue-50 text-blue-600" },
+  system: { icon: Info, tint: "bg-slate-100 text-slate-500" },
+};
+
+export default function NotificationBell() {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState(initialNotifications);
+  const [coords, setCoords] = useState({ top: 0, right: 0 });
+  const btnRef = useRef(null);
+  const panelRef = useRef(null);
+  const navigate = useNavigate();
+
+  const unreadCount = items.filter((n) => !n.read).length;
+
+  // Tính vị trí panel dựa theo nút chuông, để panel render qua Portal
+  // (gắn thẳng vào <body>) không bị bất kỳ vùng nội dung nào (biểu đồ,
+  // card có transform...) đè lên trên do khác ngữ cảnh xếp lớp (stacking context).
+  useLayoutEffect(() => {
+    if (!open || !btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    setCoords({
+      top: rect.bottom + 8,
+      right: window.innerWidth - rect.right,
+    });
+  }, [open]);
+
+  useEffect(() => {
+    const onClickOutside = (e) => {
+      if (
+        btnRef.current && !btnRef.current.contains(e.target) &&
+        panelRef.current && !panelRef.current.contains(e.target)
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  const markAllRead = () => setItems((list) => list.map((n) => ({ ...n, read: true })));
+
+  const handleClickItem = (n) => {
+    setItems((list) => list.map((i) => (i.id === n.id ? { ...i, read: true } : i)));
+    setOpen(false);
+    if (n.leadId) {
+      navigate("/leads");
+    }
+  };
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={() => setOpen((o) => !o)}
+        className="relative text-slate-500 hover:text-slate-800"
+        title="Thông báo"
+      >
+        <Bell size={18} />
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-[10px] text-white flex items-center justify-center">
+            {unreadCount}
+          </span>
+        )}
+      </button>
+
+      {open &&
+        createPortal(
+          <div
+            ref={panelRef}
+            style={{ position: "fixed", top: coords.top, right: coords.right }}
+            className="w-80 max-w-[90vw] bg-white border border-slate-200 rounded-xl shadow-elevated z-[9999] overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+              <p className="text-sm font-semibold text-slate-900">Thông báo</p>
+              <button
+                onClick={markAllRead}
+                className="flex items-center gap-1 text-[11px] text-brand-600 hover:text-brand-700"
+              >
+                <CheckCheck size={13} /> Đánh dấu đã đọc tất cả
+              </button>
+            </div>
+
+            <div className="max-h-96 overflow-y-auto divide-y divide-slate-100">
+              {items.length === 0 && (
+                <p className="text-sm text-slate-400 text-center py-8">Không có thông báo nào.</p>
+              )}
+              {items.map((n) => {
+                const cfg = typeConfig[n.type] || typeConfig.system;
+                const Icon = cfg.icon;
+                return (
+                  <button
+                    key={n.id}
+                    onClick={() => handleClickItem(n)}
+                    className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors ${
+                      !n.read ? "bg-blue-50/60" : ""
+                    }`}
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${cfg.tint}`}>
+                      <Icon size={15} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-slate-800 flex items-center gap-1.5">
+                        {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />}
+                        <span className="truncate">{n.title}</span>
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{n.desc}</p>
+                      <p className="text-[10px] text-slate-400 mt-1">{n.time}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>,
+          document.body
+        )}
+    </>
+  );
+}

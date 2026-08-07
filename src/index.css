@@ -1,0 +1,412 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #f8fafc;
+  color: #111827;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+}
+
+/* ============================================================
+   Landing page — hero/CTA motion & background accents
+   ============================================================ */
+@keyframes blobFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(4%, -6%) scale(1.08); }
+  66% { transform: translate(-3%, 4%) scale(0.95); }
+}
+
+@keyframes blobFloatSlow {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-5%, 5%) scale(1.1); }
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes ctaGlowPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.45), 0 8px 24px -6px rgba(5, 150, 105, 0.5); }
+  50% { box-shadow: 0 0 0 10px rgba(5, 150, 105, 0), 0 8px 30px -4px rgba(5, 150, 105, 0.65); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.hero-blob {
+  animation: blobFloat 14s ease-in-out infinite;
+}
+
+.hero-blob-slow {
+  animation: blobFloatSlow 18s ease-in-out infinite;
+}
+
+.hero-grid-pattern {
+  background-image:
+    linear-gradient(to right, rgba(37, 99, 235, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(37, 99, 235, 0.06) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black 40%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black 40%, transparent 100%);
+}
+
+.hero-gradient-text {
+  background: linear-gradient(90deg, #2563eb, #059669, #2563eb);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: gradientShift 6s ease-in-out infinite;
+}
+
+.cta-glow {
+  animation: ctaGlowPulse 2.6s ease-in-out infinite;
+}
+
+.cta-mesh-bg {
+  background: linear-gradient(120deg, #1d4ed8, #2563eb 35%, #059669 100%);
+  background-size: 200% 200%;
+  animation: gradientShift 8s ease-in-out infinite;
+}
+
+.shimmer-badge {
+  background: linear-gradient(
+    100deg,
+    rgba(37, 99, 235, 0.12) 30%,
+    rgba(5, 150, 105, 0.35) 50%,
+    rgba(37, 99, 235, 0.12) 70%
+  );
+  background-size: 250% 100%;
+  animation: shimmer 3.5s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-blob,
+  .hero-blob-slow,
+  .hero-gradient-text,
+  .cta-glow,
+  .cta-mesh-bg,
+  .shimmer-badge {
+    animation: none !important;
+  }
+}
+
+/* Custom scrollbar for light theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ============================================================
+   "Phễu chuyển đổi" (Conversion Funnel) — responsive component
+   ------------------------------------------------------------
+   - Dùng CSS Container Queries (@container) để layout phản ứng
+     theo chiều rộng THỰC TẾ của chính component, nên luôn đúng
+     ở mọi mức zoom trình duyệt (50/75/100/125%) và mọi độ rộng
+     màn hình, độc lập với viewport.
+   - Hình phễu và bảng dữ liệu là 3 cột của CÙNG MỘT CSS Grid
+     (không phải 2 khối tách rời), nên chiều cao mỗi hàng luôn
+     tự động đồng bộ tuyệt đối giữa bậc phễu và dòng dữ liệu
+     tương ứng — không cần đo đạc bằng JavaScript.
+   - Không dùng width/height cố định: mọi kích thước dùng %,
+     minmax(), 1fr, clamp() để tự co giãn.
+   ============================================================ */
+
+.funnel-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: #ffffff;
+  border: 1px solid #d7dde8;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 2px 0 rgb(15 23 42 / 0.06), 0 2px 10px -2px rgb(15 23 42 / 0.08);
+  transition: box-shadow 200ms ease-out;
+}
+.funnel-card:hover {
+  box-shadow: 0 4px 10px -2px rgb(15 23 42 / 0.08), 0 2px 6px -2px rgb(15 23 42 / 0.06);
+}
+
+/* Vùng "thân" phễu (bảng lưới + danh sách tối giản) — đây mới là nơi cần
+   phản ứng theo kích thước thật của nó, nên container-type được đặt ở
+   đây thay vì ở .funnel-card, để dùng chung được cho cả Dashboard
+   (bên trong .funnel-card) lẫn trang Báo cáo (bên trong ChartCard). */
+.funnel-card__body {
+  container-type: inline-size;
+  container-name: funnelcard;
+  min-width: 0;
+}
+
+.funnel-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  min-width: 0;
+}
+
+.funnel-card__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.funnel-card__action {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  color: #2563eb;
+  white-space: nowrap;
+}
+.funnel-card__action:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Bảng lưới (desktop + tablet) ----------
+   3 cột: [hình phễu] [tên giai đoạn] [số lượng]
+   Chiều cao mỗi hàng tự co theo nội dung, tối thiểu 40px,
+   và giống hệt nhau giữa cột hình phễu & cột dữ liệu vì
+   chúng nằm chung một hàng lưới (grid row). */
+.funnel-grid {
+  display: grid;
+  /* Tỉ lệ 50:50 giữa hình phễu và bảng dữ liệu:
+     cột hình = 1fr, hai cột bảng cộng lại = 0.5fr + 0.5fr = 1fr
+     => tổng 2fr, cột hình luôn chiếm đúng 1/2 chiều rộng. */
+  grid-template-columns: minmax(90px, 1fr) minmax(0, 0.5fr) minmax(58px, 0.5fr);
+  grid-auto-rows: minmax(40px, 1fr);
+  align-items: stretch;
+  column-gap: 12px;
+  row-gap: 0;
+  min-width: 0;
+}
+
+.funnel-grid__cell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 0;
+}
+
+.funnel-grid__cell--shape {
+  justify-content: center;
+  padding: 2px 0;
+}
+
+.funnel-grid__cell--stage {
+  min-width: 0;
+  padding: 0 10px;
+  border-left: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.funnel-grid__cell--value {
+  min-width: 0;
+  padding: 0 10px;
+  justify-content: flex-end;
+  border-right: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.funnel-grid__cell--stage:nth-child(2) {
+  border-top: 1px solid #e5e7eb;
+  border-top-left-radius: 10px;
+}
+.funnel-grid__cell--value:nth-child(3) {
+  border-top: 1px solid #e5e7eb;
+  border-top-right-radius: 10px;
+}
+
+.funnel-grid__cell--head {
+  background: #f9fafb;
+  color: #6b7280;
+  font-weight: 600;
+  font-size: 13px;
+}
+.funnel-grid__cell--head.funnel-grid__cell--stage {
+  border-top: 1px solid #e5e7eb;
+  border-top-left-radius: 10px;
+}
+.funnel-grid__cell--head.funnel-grid__cell--value {
+  border-top: 1px solid #e5e7eb;
+  border-top-right-radius: 10px;
+}
+
+.funnel-grid__cell--stage.funnel-grid__cell--last {
+  border-bottom-left-radius: 10px;
+}
+.funnel-grid__cell--value.funnel-grid__cell--last {
+  border-bottom-right-radius: 10px;
+}
+
+.funnel-grid__shape {
+  display: block;
+  height: 100%;
+  min-height: 20px;
+}
+
+.funnel-grid__stage-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.funnel-grid__value-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  text-align: right;
+}
+.funnel-grid__pct {
+  font-weight: 500;
+  color: #6b7280;
+}
+
+/* ---------- Giao diện tối giản (mobile / không đủ chỗ) ----------
+   Ẩn mặc định; chỉ hiện khi chính bản thân .funnel-card quá hẹp
+   để chứa bảng 3 cột mà không bị tràn / cắt chữ. */
+.funnel-compact {
+  display: none;
+  flex-direction: column;
+}
+
+.funnel-compact__row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 30px;
+  padding: 6px 2px;
+  border-bottom: 1px dashed #e5e7eb;
+}
+.funnel-compact__row:last-child {
+  border-bottom: none;
+}
+
+.funnel-compact__name {
+  flex-shrink: 0;
+  max-width: 60%;
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.funnel-compact__dots {
+  flex: 1 1 auto;
+  min-width: 10px;
+  height: 1em;
+  border-bottom: 1px dotted #9ca3af;
+  transform: translateY(-3px);
+}
+
+.funnel-compact__value {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+}
+.funnel-compact__pct {
+  font-weight: 500;
+  color: #6b7280;
+}
+
+/* ---------- Tier "tablet / thu gọn": vẫn giữ bảng 3 cột (có hình phễu)
+   nhưng nén khoảng cách + cỡ chữ lại. Đây là trạng thái mặc định cho
+   hầu hết các card ở Dashboard (~300-380px) — hình phễu LUÔN hiển thị
+   ở đây, chỉ chữ trong bảng được phép xuống dòng khi cần (không cắt). */
+@container funnelcard (max-width: 459px) {
+  .funnel-grid {
+    /* vẫn giữ tỉ lệ 50:50, chỉ thu nhỏ mốc tối thiểu để có thêm chỗ
+       cho 2 cột tên/giá trị ở bề rộng hẹp */
+    grid-template-columns: minmax(44px, 1fr) minmax(0, 0.5fr) minmax(38px, 0.5fr);
+    column-gap: 5px;
+  }
+  .funnel-grid__cell--stage,
+  .funnel-grid__cell--value {
+    padding: 0 6px;
+  }
+  .funnel-grid__cell--head {
+    font-size: 12px;
+    overflow-wrap: break-word;
+  }
+  .funnel-grid__stage-text,
+  .funnel-grid__value-text {
+    font-size: 12px;
+  }
+  .funnel-grid__value-text {
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
+}
+
+/* ---------- Tier "tối giản": CHỈ dùng khi thật sự không còn đủ chỗ
+   (ví dụ sidebar tối chiếm gần hết màn hình điện thoại thật) — không
+   áp dụng cho các card thông thường ở Dashboard/Báo cáo, để hình phễu
+   luôn hiển thị ở trạng thái bình thường (zoom 50/75/100/125%). ---------- */
+@container funnelcard (max-width: 200px) {
+  .funnel-grid {
+    display: none;
+  }
+  .funnel-compact {
+    display: flex;
+  }
+}
+
+/* ---------- Tier cực hẹp: điện thoại thật / sidebar chiếm gần hết màn hình ----------
+   Khi ngay cả 1 dòng "Tên ... Giá trị" cũng không đủ chỗ, xếp tên trên
+   giá trị dưới (bỏ dấu chấm dẫn) thay vì để trình duyệt ngắt giữa từ. */
+@container funnelcard (max-width: 190px) {
+  .funnel-compact__row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .funnel-compact__dots {
+    display: none;
+  }
+  .funnel-compact__name {
+    max-width: 100%;
+  }
+}
