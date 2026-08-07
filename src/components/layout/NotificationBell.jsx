@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { Bell, Flame, Clock, Info, UserPlus, CheckCheck } from "lucide-react";
+import { Bell, Flame, Clock, Info, UserPlus, CheckCheck, BellOff } from "lucide-react";
 import { notifications as initialNotifications } from "../../data/mockData.js";
+import EmptyState from "../ui/EmptyState.jsx";
 
 const typeConfig = {
   "hot-lead": { icon: Flame, tint: "bg-orange-50 text-orange-600" },
@@ -91,7 +92,7 @@ export default function NotificationBell() {
 
             <div className="max-h-96 overflow-y-auto divide-y divide-slate-100">
               {items.length === 0 && (
-                <p className="text-sm text-slate-400 text-center py-8">Không có thông báo nào.</p>
+                <EmptyState icon={BellOff} title="Chưa có thông báo nào" compact />
               )}
               {items.map((n) => {
                 const cfg = typeConfig[n.type] || typeConfig.system;

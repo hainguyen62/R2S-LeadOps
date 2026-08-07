@@ -70,7 +70,8 @@ export default function Register() {
     }
 
     // Tạo lead mới, chấm điểm và phân loại tự động theo cùng luật với
-    // trang Quản lý Lead, để tránh 2 nơi tính điểm khác nhau.
+    // trang Quản lý Lead (dựa trên tín hiệu ban đầu: đã xác định khóa học +
+    // có đầy đủ SĐT/email, chưa rõ thời gian đăng ký), để tránh 2 nơi tính điểm khác nhau.
     const newLead = {
       id: Date.now(),
       name: form.fullName.trim(),
@@ -81,9 +82,14 @@ export default function Register() {
       phone: form.phone.trim(),
       email: form.email.trim(),
       assignee: "Chưa phân công",
+      signals: {
+        fitCourseDefined: true,
+        hasFullContact: true,
+        enrollmentIntent: "unknown",
+      },
     };
     newLead.score = scoreLead(newLead);
-    newLead.cls = classify(newLead.score);
+    newLead.cls = classify(newLead.score, newLead);
     newLead.initials = newLead.name.split(" ").slice(-2).map((w) => w[0]).join("").toUpperCase();
     leads.unshift(newLead);
 

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Users, Activity, Bell, Link, ExternalLink, Pencil, Trash2, X, ShieldCheck, Check, Info } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Users, Activity, Bell, Link, ExternalLink, Pencil, Trash2, X, ShieldCheck, Check, Info, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import Avatar from "../components/ui/Avatar.jsx";
 import Pill from "../components/ui/Pill.jsx";
 import ConfirmDialog from "../components/ui/ConfirmDialog.jsx";
@@ -18,6 +18,16 @@ const tabs = [
   { id: "logs", label: "Nhật ký hoạt động", icon: Activity },
   { id: "notify", label: "Thông báo", icon: Bell },
   { id: "integrations", label: "Kết nối", icon: Link },
+];
+
+// Các cột có thể sắp xếp (kiểu FC Online — giống trang Quản lý Lead):
+//   key  -> trường dữ liệu của user
+//   label -> tiêu đề cột hiển thị
+const sortableColumns = [
+  { key: "name", label: "Người dùng" },
+  { key: "role", label: "Vai trò" },
+  { key: "email", label: "Email" },
+  { key: "status", label: "Trạng thái" },
 ];
 
 // Ma trận phân quyền theo 4 nhóm đối tượng sử dụng (Mục IV tài liệu Kế
@@ -45,6 +55,45 @@ export default function Settings() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [matrix, setMatrix] = useState(defaultMatrix);
   const [matrixDirty, setMatrixDirty] = useState(false);
+
+  // Sắp xếp cột kiểu FC Online — giống trang Quản lý Lead
+  const [sortKey, setSortKey] = useState(null);
+  const [sortDir, setSortDir] = useState(null); // 'desc' | 'asc' | null
+
+  // Danh sách tài khoản đã sắp xếp (chỉ sắp xếp khi có sortKey + sortDir)
+  const sortedUsers = useMemo(() => {
+    if (!sortKey || !sortDir) return userList;
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...userList].sort((a, b) => {
+      const va = String(a[sortKey] ?? "");
+      const vb = String(b[sortKey] ?? "");
+      return va.localeCompare(vb, "vi", { sensitivity: "base" }) * dir;
+    });
+  }, [userList, sortKey, sortDir]);
+
+  // Cơ chế click tiêu đề cột:
+  //   lần 1 -> desc (↓), lần 2 -> asc (↑), lần 3 -> hủy (↕ về mặc định)
+  const handleSort = (key) => {
+    if (sortKey !== key) {
+      setSortKey(key);
+      setSortDir("desc");
+    } else if (sortDir === "desc") {
+      setSortDir("asc");
+    } else if (sortDir === "asc") {
+      setSortKey(null);
+      setSortDir(null);
+    }
+  };
+
+  const renderSortIcon = (key) => {
+    if (sortKey === key && sortDir === "desc") {
+      return <ArrowDown size={13} className="text-brand-600" />;
+    }
+    if (sortKey === key && sortDir === "asc") {
+      return <ArrowUp size={13} className="text-brand-600" />;
+    }
+    return <ArrowUpDown size={13} className="text-slate-300" />;
+  };
 
   const openEdit = (user) => {
     setEditingUser(user);
@@ -118,15 +167,24 @@ export default function Settings() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-[11px] text-slate-500 border-b border-slate-200 bg-slate-50">
-                  <th className="py-3 px-4 font-medium">Người dùng</th>
-                  <th className="py-3 px-4 font-medium">Vai trò</th>
-                  <th className="py-3 px-4 font-medium">Email</th>
-                  <th className="py-3 px-4 font-medium">Trạng thái</th>
+                  {sortableColumns.map((col) => (
+                    <th key={col.key} className="py-3 px-4 font-medium">
+                      <button
+                        type="button"
+                        onClick={() => handleSort(col.key)}
+                        className="inline-flex items-center gap-1 hover:text-slate-800 transition-colors"
+                        title="Bấm để sắp xếp (↓ giảm dần, ↑ tăng dần, bấm lần nữa để hủy)"
+                      >
+                        {col.label}
+                        {renderSortIcon(col.key)}
+                      </button>
+                    </th>
+                  ))}
                   <th className="py-3 px-4 font-medium text-right">Hành động</th>
                 </tr>
               </thead>
               <tbody>
-                {userList.map((u) => (
+                {sortedUsers.map((u) => (
                   <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50">
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">

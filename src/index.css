@@ -143,14 +143,10 @@ body {
   flex-direction: column;
   gap: 16px;
   background: #ffffff;
-  border: 1px solid #d7dde8;
-  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 1rem;
   padding: 24px;
-  box-shadow: 0 1px 2px 0 rgb(15 23 42 / 0.06), 0 2px 10px -2px rgb(15 23 42 / 0.08);
-  transition: box-shadow 200ms ease-out;
-}
-.funnel-card:hover {
-  box-shadow: 0 4px 10px -2px rgb(15 23 42 / 0.08), 0 2px 6px -2px rgb(15 23 42 / 0.06);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 /* Vùng "thân" phễu (bảng lưới + danh sách tối giản) — đây mới là nơi cần
@@ -409,4 +405,12 @@ body {
   .funnel-compact__name {
     max-width: 100%;
   }
+}
+/* ---------- Toast Notification ---------- */
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-toast-in {
+  animation: toastIn 0.2s ease-out;
 }

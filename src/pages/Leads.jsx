@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
@@ -19,15 +19,32 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Trash2,
+  Users,
+  SearchX,
 } from "lucide-react";
 import Pill from "../components/ui/Pill.jsx";
 import Avatar from "../components/ui/Avatar.jsx";
 import ScoreRulesCard from "../components/leads/ScoreRulesCard.jsx";
-import { leads, statusStyle, classStyle } from "../data/mockData.js";
+import ConfirmDialog from "../components/ui/ConfirmDialog.jsx";
+import EmptyState from "../components/ui/EmptyState.jsx";
+import { LeadListSkeleton } from "../components/ui/Skeleton.jsx";
+import { useToast } from "../components/ui/ToastProvider.jsx";
+import { leads, statusStyle, classStyle, leadStatusOrder } from "../data/mockData.js";
+import { scoreLead, classify } from "../utils/leadScoring.js";
 import { exportToCsv } from "../utils/exportCsv.js";
 import { importLeadsFromCsv } from "../utils/importCsv.js";
 
 const pageSize = 6;
+
+// Ánh xạ lựa chọn "Thời gian dự kiến đăng ký" trên form -> mã tín hiệu
+// enrollmentIntent dùng cho engine chấm điểm (Nhóm B).
+const enrollmentIntentMap = {
+  "Trong 7 ngày": "7d",
+  "Trong 30 ngày": "30d",
+  "1–3 tháng": "1-3m",
+  "Chưa có nhu cầu trong 6 tháng": "6m+",
+};
 
 // Các cột có thể sắp xếp (kiểu FC Online):
 //   key  -> trường dữ liệu của lead
@@ -58,6 +75,8 @@ function getSortValue(l, key) {
 
 export default function Leads() {
   const navigate = useNavigate();
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("Tất cả");
   const [classFilter, setClassFilter] = useState("Tất cả");
@@ -67,6 +86,15 @@ export default function Leads() {
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importMsg, setImportMsg] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [refreshTick, forceRefresh] = useState(0);
+
+  // Mô phỏng gọi API tải danh sách lead — hiện skeleton một nhịp ngắn
+  // trước khi hiển thị dữ liệu thật (đúng hành vi UI khi có backend thật).
+  useEffect(() => {
+    const t = setTimeout(() => setLoading(false), 600);
+    return () => clearTimeout(t);
+  }, []);
   const emptyForm = {
     // Bắt buộc
     name: "",
@@ -87,8 +115,8 @@ export default function Leads() {
   const [formErrors, setFormErrors] = useState({});
   const [showExtended, setShowExtended] = useState(false);
 
-  const statuses = ["Tất cả", ...new Set(leads.map((l) => l.status))];
-  const classes = ["Tất cả", "Lead nóng", "Lead ấm", "Lead lạnh"];
+  const statuses = ["Tất cả", ...leadStatusOrder];
+  const classes = ["Tất cả", "Lead nóng", "Lead ấm", "Lead lạnh", "Không hợp lệ"];
 
   // Lọc + sắp xếp cùng lúc, KHÔNG tải lại trang, giữ nguyên bộ lọc/tìm kiếm
   const filtered = useMemo(() => {
@@ -122,7 +150,7 @@ export default function Leads() {
     }
 
     return rows;
-  }, [query, statusFilter, classFilter, sortKey, sortDir]);
+  }, [query, statusFilter, classFilter, sortKey, sortDir, refreshTick]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
@@ -155,7 +183,7 @@ export default function Leads() {
     if (sortKey === key && sortDir === "asc") {
       return <ArrowUp size={13} className="text-brand-600" />;
     }
-    return <ArrowUpDown size={13} className="text-slate-400" />;
+    return <ArrowUpDown size={13} className="text-slate-300" />;
   };
 
   const handleExport = () => {
@@ -177,15 +205,21 @@ export default function Leads() {
       const imported = importLeadsFromCsv(text);
       if (imported.length === 0) {
         setImportMsg("Không tìm thấy lead hợp lệ nào trong file. Vui lòng kiểm tra lại.");
+        toast.error("Import CSV thất bại: không tìm thấy lead hợp lệ nào trong file.");
         return;
       }
       // Thêm các lead nhập vào (đảo ngược để giữ thứ tự ban đầu)
       imported.reverse().forEach((l) => leads.unshift(l));
       setImportMsg(`Đã nhập thành công ${imported.length} lead từ file CSV.`);
+      toast.success(`Import CSV hoàn tất — đã thêm ${imported.length} lead.`);
       resetPage();
       setShowImport(false);
+      forceRefresh((n) => n + 1);
     };
-    reader.onerror = () => setImportMsg("Không thể đọc file. Vui lòng thử lại.");
+    reader.onerror = () => {
+      setImportMsg("Không thể đọc file. Vui lòng thử lại.");
+      toast.error("Import CSV thất bại: không thể đọc file.");
+    };
     reader.readAsText(file);
     // Reset input để có thể chọn lại cùng file
     e.target.value = "";
@@ -213,15 +247,15 @@ export default function Leads() {
       return;
     }
     setFormErrors({});
-    // Demo: thêm lead vào đầu danh sách
-    leads.unshift({
+
+    // Xây tín hiệu chấm điểm (Nhóm A–D) từ đúng những gì người dùng đã điền,
+    // để điểm/phân loại luôn nhất quán với engine chung (leadScoring.js).
+    const newLead = {
       id: Date.now(),
       name: form.name.trim(),
       course: form.course,
       source: form.source,
       status: "Lead mới",
-      score: 25,
-      cls: "Lead lạnh",
       date: new Date().toLocaleDateString("vi-VN"),
       phone: form.phone.trim() || "—",
       email: form.email.trim() || "—",
@@ -235,10 +269,37 @@ export default function Leads() {
       preferredContactTime: form.preferredContactTime || undefined,
       note: form.note.trim() || undefined,
       initials: form.name.trim().split(" ").slice(-2).map((w) => w[0]).join("").toUpperCase(),
-    });
+      signals: {
+        fitCourseDefined: true,
+        fitCareerGoal: !!form.studyGoal.trim(),
+        hasFullContact: !!(form.phone.trim() && form.email.trim()),
+        enrollmentIntent: enrollmentIntentMap[form.expectedEnrollment] || "unknown",
+      },
+    };
+    newLead.score = scoreLead(newLead);
+    newLead.cls = classify(newLead.score, newLead);
+
+    // Demo: thêm lead vào đầu danh sách
+    leads.unshift(newLead);
     setShowAdd(false);
     setShowExtended(false);
     setForm(emptyForm);
+    toast.success("Tạo lead thành công.");
+    forceRefresh((n) => n + 1);
+  };
+
+  const handleDeleteLead = () => {
+    if (!deleteTarget) return;
+    const idx = leads.findIndex((l) => l.id === deleteTarget.id);
+    if (idx === -1) {
+      toast.error("Xóa thất bại: không tìm thấy lead.");
+      setDeleteTarget(null);
+      return;
+    }
+    leads.splice(idx, 1);
+    toast.success(`Đã xóa lead "${deleteTarget.name}" thành công.`);
+    setDeleteTarget(null);
+    forceRefresh((n) => n + 1);
   };
 
   return (
@@ -246,25 +307,25 @@ export default function Leads() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-lg font-bold text-slate-900">Quản lý Lead</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Quản lý Lead</h2>
           <p className="text-sm text-slate-500">Quản lý, phân loại và chấm điểm khách hàng tiềm năng</p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={handleExport}
-            className="flex items-center gap-1.5 text-xs border border-slate-300 rounded-card px-3 py-2 text-slate-600 hover:bg-slate-100 shadow-sm hover:shadow-md transition-all duration-200 ease-out"
+            className="flex items-center gap-1.5 text-xs border border-slate-300 rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50"
           >
             <Download size={14} /> Xuất CSV
           </button>
           <button
             onClick={() => { setShowImport(true); setImportMsg(""); }}
-            className="flex items-center gap-1.5 text-xs border border-slate-300 rounded-card px-3 py-2 text-slate-600 hover:bg-slate-100 shadow-sm hover:shadow-md transition-all duration-200 ease-out"
+            className="flex items-center gap-1.5 text-xs border border-slate-300 rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50"
           >
             <Upload size={14} /> Nhập CSV
           </button>
           <button
             onClick={() => { setForm(emptyForm); setFormErrors({}); setShowExtended(false); setShowAdd(true); }}
-            className="flex items-center gap-1.5 text-xs bg-brand-600 rounded-card px-3 py-2 text-white hover:bg-brand-500 shadow-sm hover:shadow-md transition-all duration-200 ease-out"
+            className="flex items-center gap-1.5 text-xs bg-brand-600 rounded-lg px-3 py-2 text-white hover:bg-brand-500"
           >
             <Plus size={14} /> Thêm lead
           </button>
@@ -282,21 +343,21 @@ export default function Leads() {
       )}
 
       {/* Filters */}
-      <div className="bg-white border border-slate-300 rounded-card p-4 flex flex-wrap items-center gap-3 shadow-card transition-all duration-200 ease-out hover:shadow-elevated">
+      <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap items-center gap-3 shadow-card">
         <div className="relative flex-1 min-w-[200px]">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             value={query}
             onChange={(e) => { setQuery(e.target.value); resetPage(); }}
             placeholder="Tìm theo tên, khóa học, email..."
-            className="w-full bg-slate-50 border border-slate-300 rounded-input pl-9 pr-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 focus:bg-white transition-all duration-200 ease-out"
+            className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-brand-500 focus:bg-white"
           />
         </div>
         <div className="flex items-center gap-2">
           <select
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value); resetPage(); }}
-            className="bg-slate-50 border border-slate-300 rounded-input px-3 py-2 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all duration-200 ease-out"
+            className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500"
           >
             {statuses.map((s) => (
               <option key={s} value={s}>{s}</option>
@@ -305,30 +366,42 @@ export default function Leads() {
           <select
             value={classFilter}
             onChange={(e) => { setClassFilter(e.target.value); resetPage(); }}
-            className="bg-slate-50 border border-slate-300 rounded-input px-3 py-2 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all duration-200 ease-out"
+            className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500"
           >
             {classes.map((c) => (
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
-          <button className="flex items-center gap-1.5 text-xs border border-slate-300 rounded-card px-3 py-2 text-slate-600 hover:bg-slate-100 shadow-sm hover:shadow-md transition-all duration-200 ease-out">
+          <button className="flex items-center gap-1.5 text-xs border border-slate-300 rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50">
             <ListFilter size={14} /> Bộ lọc
           </button>
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-white border border-slate-300 rounded-card overflow-hidden shadow-card">
+      {loading ? (
+        <LeadListSkeleton />
+      ) : leads.length === 0 ? (
+        <div className="bg-white border border-slate-200 rounded-xl shadow-card">
+          <EmptyState
+            icon={Users}
+            title="Chưa có lead nào"
+            description="Bắt đầu bằng cách thêm lead thủ công hoặc nhập từ file CSV."
+            action={{ label: "Thêm lead", onClick: () => { setForm(emptyForm); setFormErrors({}); setShowExtended(false); setShowAdd(true); } }}
+          />
+        </div>
+      ) : (
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-card">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-[11px] text-slate-600 border-b border-slate-200 bg-slate-100/50">
+              <tr className="text-left text-[11px] text-slate-500 border-b border-slate-200 bg-slate-50">
                 {sortableColumns.map((col) => (
-                  <th key={col.key} className="py-3 px-4 font-semibold">
+                  <th key={col.key} className="py-3 px-4 font-medium">
                     <button
                       type="button"
                       onClick={() => handleSort(col.key)}
-                      className="inline-flex items-center gap-1 hover:text-slate-900 transition-colors duration-200 ease-out"
+                      className="inline-flex items-center gap-1 hover:text-slate-800 transition-colors"
                       title="Bấm để sắp xếp (↓ giảm dần, ↑ tăng dần, bấm lần nữa để hủy)"
                     >
                       {col.label}
@@ -336,7 +409,7 @@ export default function Leads() {
                     </button>
                   </th>
                 ))}
-                <th className="py-3 px-4 font-semibold">Hành động</th>
+                <th className="py-3 px-4 font-medium">Hành động</th>
               </tr>
             </thead>
             <tbody>
@@ -344,37 +417,49 @@ export default function Leads() {
                 <tr
                   key={l.id}
                   onClick={() => navigate(`/leads/${l.id}`)}
-                  className="border-b border-slate-200/70 hover:bg-brand-50/60 cursor-pointer transition-colors duration-150"
+                  className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer"
                 >
-                  <td className="py-3 px-4">
+                  <td className="py-2.5 px-4">
                     <div className="flex items-center gap-2">
                       <Avatar name={l.name} initials={l.initials} size={28} />
                       <div>
-                        <p className="whitespace-nowrap font-medium text-slate-800">{l.name}</p>
+                        <p className="whitespace-nowrap text-slate-800">{l.name}</p>
                         <p className="text-[10px] text-slate-500">{l.email}</p>
                       </div>
                     </div>
                   </td>
-                  <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{l.course}</td>
-                  <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{l.source}</td>
-                  <td className="py-3 px-4"><Pill text={l.status} map={statusStyle} /></td>
-                  <td className="py-3 px-4 font-semibold text-slate-800">{l.score}</td>
-                  <td className="py-3 px-4"><Pill text={l.cls} map={classStyle} /></td>
-                  <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{l.assignee}</td>
-                  <td className="py-3 px-4 text-slate-400 whitespace-nowrap text-xs">{l.date}</td>
-                  <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
+                  <td className="py-2.5 px-4 text-slate-500 whitespace-nowrap">{l.course}</td>
+                  <td className="py-2.5 px-4 text-slate-500 whitespace-nowrap">{l.source}</td>
+                  <td className="py-2.5 px-4"><Pill text={l.status} map={statusStyle} /></td>
+                  <td className="py-2.5 px-4 font-medium text-slate-800">{l.score}</td>
+                  <td className="py-2.5 px-4"><Pill text={l.cls} map={classStyle} /></td>
+                  <td className="py-2.5 px-4 text-slate-500 whitespace-nowrap">{l.assignee}</td>
+                  <td className="py-2.5 px-4 text-slate-400 whitespace-nowrap text-xs">{l.date}</td>
+                  <td className="py-2.5 px-4" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1.5">
-                      <button className="p-1.5 rounded-md text-slate-400 hover:bg-brand-50 hover:text-brand-600 transition-colors duration-150" title="Gọi điện"><Phone size={13} /></button>
-                      <button className="p-1.5 rounded-md text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors duration-150" title="Gửi email"><Mail size={13} /></button>
-                      <button className="p-1.5 rounded-md text-slate-400 hover:bg-violet-50 hover:text-violet-600 transition-colors duration-150" title="Nhắn tin"><MessageCircle size={13} /></button>
+                      <button className="p-1.5 rounded-md text-slate-400 hover:bg-slate-100 hover:text-brand-600" title="Gọi điện"><Phone size={13} /></button>
+                      <button className="p-1.5 rounded-md text-slate-400 hover:bg-slate-100 hover:text-emerald-600" title="Gửi email"><Mail size={13} /></button>
+                      <button className="p-1.5 rounded-md text-slate-400 hover:bg-slate-100 hover:text-violet-600" title="Nhắn tin"><MessageCircle size={13} /></button>
+                      <button
+                        onClick={() => setDeleteTarget(l)}
+                        className="p-1.5 rounded-md text-slate-400 hover:bg-red-50 hover:text-red-600"
+                        title="Xóa lead"
+                      >
+                        <Trash2 size={13} />
+                      </button>
                     </div>
                   </td>
                 </tr>
               ))}
               {pageRows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center text-slate-500 text-sm">
-                    Không tìm thấy lead nào phù hợp.
+                  <td colSpan={9} className="p-0">
+                    <EmptyState
+                      icon={SearchX}
+                      title="Không tìm thấy kết quả phù hợp"
+                      description="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc trạng thái/phân loại."
+                      compact
+                    />
                   </td>
                 </tr>
               )}
@@ -392,7 +477,7 @@ export default function Leads() {
           <div className="flex items-center gap-1">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="p-1.5 rounded-md border border-slate-300 hover:bg-slate-100 disabled:opacity-40 transition-colors duration-150"
+              className="p-1.5 rounded-md border border-slate-300 hover:bg-slate-50 disabled:opacity-40"
               disabled={page === 1}
             >
               <ChevronLeft size={14} />
@@ -404,7 +489,7 @@ export default function Leads() {
                 className={`w-7 h-7 rounded-md text-xs ${
                   page === i + 1
                     ? "bg-brand-600 text-white"
-                    : "border border-slate-300 hover:bg-slate-100 text-slate-500 transition-colors duration-150"
+                    : "border border-slate-300 hover:bg-slate-50 text-slate-500"
                 }`}
               >
                 {i + 1}
@@ -412,7 +497,7 @@ export default function Leads() {
             ))}
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="p-1.5 rounded-md border border-slate-300 hover:bg-slate-100 disabled:opacity-40 transition-colors duration-150"
+              className="p-1.5 rounded-md border border-slate-300 hover:bg-slate-50 disabled:opacity-40"
               disabled={page === totalPages}
             >
               <ChevronRight size={14} />
@@ -420,13 +505,22 @@ export default function Leads() {
           </div>
         </div>
       </div>
+      )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Xóa lead"
+        message={deleteTarget ? `Bạn có chắc chắn muốn xóa lead "${deleteTarget.name}"? Toàn bộ lịch sử chăm sóc liên quan cũng sẽ không còn hiển thị.` : ""}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteLead}
+      />
 
       {/* Import CSV Modal */}
       {showImport && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-300 rounded-card w-full max-w-md p-6 shadow-modal">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md p-6 shadow-elevated">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-slate-900">Nhập lead từ CSV</h3>
+              <h3 className="font-semibold text-slate-900">Nhập lead từ CSV</h3>
               <button onClick={() => setShowImport(false)} className="text-slate-400 hover:text-slate-600">
                 <X size={18} />
               </button>
@@ -436,10 +530,10 @@ export default function Leads() {
                 {importMsg}
               </div>
             )}
-            <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-300 rounded-xl p-8 cursor-pointer hover:border-brand-500 hover:bg-slate-50 transition-colors duration-200">
+            <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-300 rounded-xl p-8 cursor-pointer hover:border-brand-500 hover:bg-slate-50 transition-colors">
               <FileUp size={28} className="text-brand-600" />
               <span className="text-sm text-slate-600 font-medium">Chọn file CSV để tải lên</span>
-              <span className="text-xs text-slate-500 text-center">
+              <span className="text-xs text-slate-400 text-center">
                 Hỗ trợ cột tiếng Anh (name, course, source, phone, email...) và tiếng Việt (Họ tên, Khóa học, Số điện thoại...)
               </span>
               <input type="file" accept=".csv,text/csv" onChange={handleImportFile} className="hidden" />
@@ -447,7 +541,7 @@ export default function Leads() {
             <div className="flex gap-2 pt-4">
               <button
                 onClick={() => setShowImport(false)}
-                className="flex-1 border border-slate-300 rounded-card py-2 text-sm text-slate-600 hover:bg-slate-100 shadow-sm hover:shadow-md transition-all duration-200 ease-out"
+                className="flex-1 border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50"
               >
                 Hủy
               </button>
@@ -458,12 +552,12 @@ export default function Leads() {
 
       {/* Add Lead Modal */}
       {showAdd && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-300 rounded-card w-full max-w-lg shadow-modal max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-lg shadow-elevated max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between px-6 pt-6 pb-2 shrink-0">
               <div>
-                <h3 className="font-bold text-slate-900">Thêm lead mới</h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">Các trường có dấu * là bắt buộc</p>
+                <h3 className="font-semibold text-slate-900">Thêm lead mới</h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">Các trường có dấu * là bắt buộc</p>
               </div>
               <button
                 onClick={() => { setShowAdd(false); setFormErrors({}); }}
@@ -487,8 +581,8 @@ export default function Leads() {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="Nguyễn Văn A"
-                  className={`w-full bg-slate-50 border rounded-input px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition-all duration-200 ease-out ${
-                    formErrors.name ? "border-red-300 focus:border-red-400" : "border-slate-300 focus:border-brand-500"
+                  className={`w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+                    formErrors.name ? "border-red-300" : "border-slate-200"
                   }`}
                 />
                 {formErrors.name && <p className="text-[11px] text-red-600 mt-1">{formErrors.name}</p>}
@@ -500,8 +594,8 @@ export default function Leads() {
                   <select
                     value={form.course}
                     onChange={(e) => setForm({ ...form, course: e.target.value })}
-                    className={`w-full bg-slate-50 border rounded-input px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition-all duration-200 ease-out ${
-                      formErrors.course ? "border-red-300 focus:border-red-400" : "border-slate-300 focus:border-brand-500"
+                    className={`w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+                      formErrors.course ? "border-red-300" : "border-slate-200"
                     }`}
                   >
                     <option value="">Chọn khóa học</option>
@@ -519,8 +613,8 @@ export default function Leads() {
                   <select
                     value={form.source}
                     onChange={(e) => setForm({ ...form, source: e.target.value })}
-                    className={`w-full bg-slate-50 border rounded-input px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition-all duration-200 ease-out ${
-                      formErrors.source ? "border-red-300 focus:border-red-400" : "border-slate-300 focus:border-brand-500"
+                    className={`w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+                      formErrors.source ? "border-red-300" : "border-slate-200"
                     }`}
                   >
                     <option value="">Chọn nguồn</option>
@@ -541,8 +635,8 @@ export default function Leads() {
                     value={form.phone}
                     onChange={(e) => setForm({ ...form, phone: e.target.value })}
                     placeholder="0900 000 000"
-                    className={`w-full bg-slate-50 border rounded-input px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition-all duration-200 ease-out ${
-                      formErrors.contact ? "border-red-300 focus:border-red-400" : "border-slate-300 focus:border-brand-500"
+                    className={`w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+                      formErrors.contact ? "border-red-300" : "border-slate-200"
                     }`}
                   />
                 </div>
@@ -552,13 +646,13 @@ export default function Leads() {
                     value={form.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
                     placeholder="email@gmail.com"
-                    className={`w-full bg-slate-50 border rounded-input px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition-all duration-200 ease-out ${
-                      formErrors.contact ? "border-red-300 focus:border-red-400" : "border-slate-300 focus:border-brand-500"
+                    className={`w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+                      formErrors.contact ? "border-red-300" : "border-slate-200"
                     }`}
                   />
                 </div>
               </div>
-              <p className="text-[11px] text-slate-500 -mt-2">* Cần điền ít nhất một trong hai: số điện thoại hoặc email.</p>
+              <p className="text-[11px] text-slate-400 -mt-2">* Cần điền ít nhất một trong hai: số điện thoại hoặc email.</p>
 
               {/* ---- Thông tin mở rộng (tùy chọn) ---- */}
               <button
@@ -571,7 +665,7 @@ export default function Leads() {
               </button>
 
               {showExtended && (
-                <div className="space-y-3 border-t border-slate-200/70 pt-3">
+                <div className="space-y-3 border-t border-slate-100 pt-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs text-slate-500 block mb-1">Trường học</label>
@@ -579,7 +673,7 @@ export default function Leads() {
                         value={form.school}
                         onChange={(e) => setForm({ ...form, school: e.target.value })}
                         placeholder="ĐH Bách Khoa..."
-                        className="w-full bg-slate-50 border border-slate-300 rounded-input px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all duration-200 ease-out"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
                       />
                     </div>
                     <div>
@@ -587,7 +681,7 @@ export default function Leads() {
                       <select
                         value={form.currentLevel}
                         onChange={(e) => setForm({ ...form, currentLevel: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-300 rounded-input px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all duration-200 ease-out"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
                       >
                         <option value="">Chọn trình độ</option>
                         <option>Chưa biết gì</option>
@@ -604,7 +698,7 @@ export default function Leads() {
                       value={form.studyGoal}
                       onChange={(e) => setForm({ ...form, studyGoal: e.target.value })}
                       placeholder="Đi làm đúng chuyên ngành, chuyển nghề..."
-                      className="w-full bg-slate-50 border border-slate-300 rounded-input px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all duration-200 ease-out"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
                     />
                   </div>
 
@@ -614,7 +708,7 @@ export default function Leads() {
                       <select
                         value={form.expectedEnrollment}
                         onChange={(e) => setForm({ ...form, expectedEnrollment: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-300 rounded-input px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all duration-200 ease-out"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
                       >
                         <option value="">Chưa xác định</option>
                         <option>Trong 7 ngày</option>
@@ -629,7 +723,7 @@ export default function Leads() {
                         value={form.city}
                         onChange={(e) => setForm({ ...form, city: e.target.value })}
                         placeholder="TP.HCM, Hà Nội..."
-                        className="w-full bg-slate-50 border border-slate-300 rounded-input px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all duration-200 ease-out"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
                       />
                     </div>
                   </div>
@@ -640,7 +734,7 @@ export default function Leads() {
                       value={form.preferredContactTime}
                       onChange={(e) => setForm({ ...form, preferredContactTime: e.target.value })}
                       placeholder="Sau 18h các ngày trong tuần..."
-                      className="w-full bg-slate-50 border border-slate-300 rounded-input px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all duration-200 ease-out"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
                     />
                   </div>
 
@@ -651,7 +745,7 @@ export default function Leads() {
                       onChange={(e) => setForm({ ...form, note: e.target.value })}
                       rows={2}
                       placeholder="Quan tâm khóa học..."
-                      className="w-full bg-slate-50 border border-slate-300 rounded-input px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all duration-200 ease-out resize-none"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 resize-none"
                     />
                   </div>
                 </div>
@@ -661,13 +755,13 @@ export default function Leads() {
                 <button
                   type="button"
                   onClick={() => { setShowAdd(false); setFormErrors({}); }}
-                  className="flex-1 border border-slate-300 rounded-card py-2 text-sm text-slate-600 hover:bg-slate-100 shadow-sm hover:shadow-md transition-all duration-200 ease-out"
+                  className="flex-1 border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-brand-600 hover:bg-brand-500 rounded-card py-2 text-sm text-white shadow-sm hover:shadow-md transition-all duration-200 ease-out"
+                  className="flex-1 bg-brand-600 hover:bg-brand-500 rounded-lg py-2 text-sm text-white"
                 >
                   Thêm lead
                 </button>
@@ -678,5 +772,4 @@ export default function Leads() {
       )}
     </div>
   );
-}
-
+} 

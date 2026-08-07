@@ -1,9 +1,12 @@
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Flame, Droplet, UserCheck } from "lucide-react";
+import { ArrowLeft, Flame, Droplet, UserCheck, ChevronDown, Check } from "lucide-react";
 import Pill from "../components/ui/Pill.jsx";
 import Avatar from "../components/ui/Avatar.jsx";
 import ContactButtons from "../components/ui/ContactButtons.jsx";
-import { leads, statusStyle, classStyle, careHistory } from "../data/mockData.js";
+import { LeadDetailSkeleton } from "../components/ui/Skeleton.jsx";
+import { useToast } from "../components/ui/ToastProvider.jsx";
+import { leads, statusStyle, classStyle, careHistory, leadStatusOrder } from "../data/mockData.js";
 import { priorityTier, getScoreBreakdown } from "../utils/leadScoring.js";
 
 // Cùng bộ 3 cấp độ ưu tiên với popup Chi tiết lead ở Dashboard, để icon
@@ -17,7 +20,31 @@ const priorityStyles = {
 export default function LeadDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
   const lead = leads.find((l) => String(l.id) === id);
+  const [loading, setLoading] = useState(true);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [, forceRefresh] = useState(0);
+
+  useEffect(() => {
+    setLoading(true);
+    const t = setTimeout(() => setLoading(false), 500);
+    return () => clearTimeout(t);
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <button
+          onClick={() => navigate("/leads")}
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
+        >
+          <ArrowLeft size={16} /> Quay lại danh sách lead
+        </button>
+        <LeadDetailSkeleton />
+      </div>
+    );
+  }
 
   if (!lead) {
     return (
@@ -28,12 +55,28 @@ export default function LeadDetail() {
         >
           <ArrowLeft size={16} /> Quay lại danh sách lead
         </button>
-        <div className="bg-white border border-slate-200 rounded-card p-10 text-center text-sm text-slate-500 shadow-card">
+        <div className="bg-white border border-slate-200 rounded-xl p-10 text-center text-sm text-slate-500 shadow-card">
           Không tìm thấy lead này.
         </div>
       </div>
     );
   }
+
+  const handleChangeStatus = (newStatus) => {
+    setStatusOpen(false);
+    if (newStatus === lead.status) return;
+    lead.status = newStatus;
+    careHistory[lead.id] = [
+      ...(careHistory[lead.id] || []),
+      {
+        text: `Chuyển trạng thái sang ${newStatus}`,
+        channel: "Tư vấn viên A",
+        date: new Date().toLocaleString("vi-VN"),
+      },
+    ];
+    toast.success("Cập nhật trạng thái thành công.");
+    forceRefresh((n) => n + 1);
+  };
 
   const history = careHistory[lead.id] || [];
   const breakdown = getScoreBreakdown(lead);
@@ -50,13 +93,13 @@ export default function LeadDetail() {
         <ArrowLeft size={16} /> Quay lại danh sách lead
       </button>
 
-      <h2 className="text-lg font-bold text-slate-900">Chi tiết Lead</h2>
+      <h2 className="text-lg font-semibold text-slate-900">Chi tiết Lead</h2>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* ---- Cột trái ---- */}
         <div className="lg:col-span-2 space-y-6">
           {/* Thông tin liên hệ */}
-          <div className="bg-white border border-slate-300 rounded-card p-5 shadow-card space-y-4 transition-all duration-200 ease-out hover:shadow-elevated">
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-card space-y-4">
             <div className="flex items-center gap-3">
               <Avatar name={lead.name} initials={lead.initials} size={48} />
               <div className="min-w-0">
@@ -66,7 +109,7 @@ export default function LeadDetail() {
               </div>
             </div>
 
-            <div className="border-t border-slate-200/70 pt-3">
+            <div className="border-t border-slate-100 pt-3">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Thông tin liên hệ</p>
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between gap-3">
@@ -87,7 +130,7 @@ export default function LeadDetail() {
                 </div>
               </div>
               {/* Liên hệ nhanh — bấm là mở kênh tương ứng ngay, không cần copy số/email */}
-              <div className="mt-3 border-t border-slate-200/70 pt-3">
+              <div className="mt-3 border-t border-slate-100 pt-3">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Liên hệ nhanh</p>
                 <ContactButtons lead={lead} />
               </div>
@@ -95,7 +138,7 @@ export default function LeadDetail() {
           </div>
 
           {/* Khối điểm số — nền trắng, viền, không dùng nền tối */}
-          <div className="bg-white border border-slate-300 rounded-card p-5 shadow-card space-y-4 transition-all duration-200 ease-out hover:shadow-elevated">
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-card space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className={`w-11 h-11 rounded-full flex items-center justify-center bg-slate-50 border border-slate-200`}>
@@ -108,14 +151,14 @@ export default function LeadDetail() {
                 </div>
                 <div>
                   <p className="text-[11px] text-slate-500">Tổng điểm</p>
-                  <p className="text-3xl font-bold text-slate-900">{lead.score}</p>
+                  <p className="text-3xl font-semibold text-slate-900">{lead.score}</p>
                 </div>
               </div>
               <Pill text={lead.cls} map={classStyle} />
             </div>
 
             {breakdown.length > 0 && (
-              <div className="border-t border-slate-200/70 pt-3 space-y-1.5">
+              <div className="border-t border-slate-100 pt-3 space-y-1.5">
                 {breakdown.map((b, i) => (
                   <div key={i} className="flex justify-between text-xs gap-3">
                     <span className="text-slate-500">{b.label}</span>
@@ -129,23 +172,45 @@ export default function LeadDetail() {
           {/* Hành động */}
           <div className="space-y-2">
             <div className="grid grid-cols-2 gap-2">
-              <button className="border border-slate-300 rounded-card py-2 text-sm text-slate-600 hover:bg-slate-100 shadow-sm hover:shadow-md transition-all duration-200 ease-out">
+              <button className="border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50">
                 + Hoạt động
               </button>
-              <button className="border border-slate-300 rounded-card py-2 text-sm text-slate-600 hover:bg-slate-100 shadow-sm hover:shadow-md transition-all duration-200 ease-out">
+              <button className="border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50">
                 Follow-up
               </button>
             </div>
-            <button className="w-full bg-brand-600 hover:bg-brand-500 rounded-card py-2.5 text-sm text-white font-medium shadow-sm hover:shadow-md transition-all duration-200 ease-out">
-              Cập nhật trạng thái
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setStatusOpen((v) => !v)}
+                className="w-full flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-500 rounded-lg py-2.5 text-sm text-white font-medium"
+              >
+                Cập nhật trạng thái <ChevronDown size={15} className={statusOpen ? "rotate-180 transition-transform" : "transition-transform"} />
+              </button>
+              {statusOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setStatusOpen(false)} />
+                  <div className="absolute z-20 bottom-full mb-2 left-0 right-0 bg-white border border-slate-200 rounded-lg shadow-elevated overflow-hidden">
+                    {leadStatusOrder.map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => handleChangeStatus(s)}
+                        className="w-full flex items-center justify-between gap-2 px-3.5 py-2 text-sm text-left text-slate-700 hover:bg-slate-50"
+                      >
+                        {s}
+                        {s === lead.status && <Check size={14} className="text-brand-600" />}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
         {/* ---- Cột phải: Lịch sử chăm sóc ---- */}
         <div className="lg:col-span-3">
-          <div className="bg-white border border-slate-300 rounded-card p-5 shadow-card transition-all duration-200 ease-out hover:shadow-elevated">
-            <p className="text-sm font-bold text-slate-900 mb-4">Lịch sử chăm sóc</p>
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-card">
+            <p className="text-sm font-semibold text-slate-900 mb-4">Lịch sử chăm sóc</p>
             {history.length === 0 ? (
               <p className="text-sm text-slate-400">Chưa có hoạt động chăm sóc nào.</p>
             ) : (
@@ -169,4 +234,3 @@ export default function LeadDetail() {
     </div>
   );
 }
-

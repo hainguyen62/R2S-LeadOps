@@ -26,11 +26,11 @@ export default function History() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-bold text-slate-900">Lịch sử chăm sóc</h2>
+        <h2 className="text-lg font-semibold text-slate-900">Lịch sử chăm sóc</h2>
         <p className="text-sm text-slate-500">Theo dõi toàn bộ lịch sử tư vấn và chăm sóc lead</p>
       </div>
 
-      <div className="bg-white border border-slate-300 rounded-card p-6 shadow-card transition-all duration-200 ease-out hover:shadow-elevated">
+      <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-card">
         <div className="space-y-1">
           {allHistory.map((h, i) => {
             const Icon = iconMap[h.text.split(" ")[0]] || UserCheck;
@@ -60,10 +60,10 @@ export default function History() {
       </div>
 
       {/* Quick status legend */}
-      <div className="bg-white border border-slate-300 rounded-card p-4 shadow-card transition-all duration-200 ease-out hover:shadow-elevated">
+      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-card">
         <p className="text-sm font-medium text-slate-800 mb-3">Trạng thái lead hiện tại</p>
         <div className="flex flex-wrap gap-2">
-          {["Lead mới", "Đã liên hệ", "Đang tư vấn", "Đã đặt cọc", "Đã đăng ký", "Chờ xử lý"].map((s) => (
+          {["Lead mới", "Đã liên hệ", "Đang tư vấn", "Đang cân nhắc", "Đã đặt cọc", "Đã đăng ký"].map((s) => (
             <Pill key={s} text={s} map={statusStyle} />
           ))}
         </div>
@@ -71,4 +71,3 @@ export default function History() {
     </div>
   );
 }
-

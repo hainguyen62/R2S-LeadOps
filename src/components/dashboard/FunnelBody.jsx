@@ -7,6 +7,7 @@ const funnelColors = {
   "Lead mới": "#2563EB",
   "Đã liên hệ": "#2EC7C9",
   "Đang tư vấn": "#F6B333",
+  "Đang cân nhắc": "#F97316",
   "Đã đặt cọc": "#7E57C2",
   "Đã đăng ký": "#66BB6A",
 };

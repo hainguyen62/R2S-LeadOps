@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { stats, leads } from "../data/mockData.js";
 import StatCard from "../components/ui/StatCard.jsx";
+import { DashboardSkeleton } from "../components/ui/Skeleton.jsx";
 import LeadCharts from "../components/dashboard/LeadCharts.jsx";
 import SourceFunnel from "../components/dashboard/SourceFunnel.jsx";
 import HotLeadsPanel from "../components/dashboard/HotLeadsPanel.jsx";
@@ -10,11 +11,19 @@ import LeadDetailModal from "../components/dashboard/LeadDetailModal.jsx";
 export default function Dashboard() {
   const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => setLoading(false), 600);
+    return () => clearTimeout(t);
+  }, []);
 
   const selected = useMemo(
     () => leads.find((l) => l.id === selectedId) || null,
     [selectedId]
   );
+
+  if (loading) return <DashboardSkeleton />;
 
   return (
     <div className="space-y-6">

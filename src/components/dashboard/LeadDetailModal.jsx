@@ -1,10 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, Facebook, Send, UserCheck, Flame, Droplet, Maximize2 } from "lucide-react";
+import { X, Facebook, Send, UserCheck, Flame, Droplet, Maximize2, ChevronDown, Check } from "lucide-react";
 import Pill from "../ui/Pill.jsx";
 import Avatar from "../ui/Avatar.jsx";
 import ContactButtons from "../ui/ContactButtons.jsx";
-import { statusStyle, classStyle, careHistory } from "../../data/mockData.js";
+import { useToast } from "../ui/ToastProvider.jsx";
+import { statusStyle, classStyle, careHistory, leadStatusOrder } from "../../data/mockData.js";
 import { priorityTier, getScoreBreakdown } from "../../utils/leadScoring.js";
 
 // Cùng bộ 3 cấp độ ưu tiên với "Lead cần xử lý ngay" ở Dashboard, để icon
@@ -43,6 +44,9 @@ const priorityStyles = {
  */
 export default function LeadDetailModal({ lead, onClose }) {
   const navigate = useNavigate();
+  const toast = useToast();
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [, forceRefresh] = useState(0);
 
   useEffect(() => {
     if (lead) {
@@ -64,6 +68,22 @@ export default function LeadDetailModal({ lead, onClose }) {
 
   if (!lead) return null;
 
+  const handleChangeStatus = (newStatus) => {
+    setStatusOpen(false);
+    if (newStatus === lead.status) return;
+    lead.status = newStatus;
+    careHistory[lead.id] = [
+      ...(careHistory[lead.id] || []),
+      {
+        text: `Chuyển trạng thái sang ${newStatus}`,
+        channel: "Tư vấn viên A",
+        date: new Date().toLocaleString("vi-VN"),
+      },
+    ];
+    toast.success("Cập nhật trạng thái thành công.");
+    forceRefresh((n) => n + 1);
+  };
+
   const history = careHistory[lead.id] || careHistory[1] || [];
   const breakdown = getScoreBreakdown(lead);
   const tier = priorityTier(lead.score);
@@ -72,12 +92,12 @@ export default function LeadDetailModal({ lead, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-sm max-h-[85vh] bg-white text-slate-800 rounded-card shadow-modal border border-slate-300 flex flex-col overflow-hidden">
+      <div className="w-full max-w-sm max-h-[85vh] bg-white text-slate-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 shrink-0">
-          <p className="text-sm font-bold text-slate-900">Chi tiết lead</p>
+          <p className="text-sm font-semibold text-slate-900">Chi tiết lead</p>
           <div className="flex items-center gap-1">
             <button
               onClick={() => { onClose(); navigate(`/leads/${lead.id}`); }}
@@ -191,9 +211,30 @@ export default function LeadDetailModal({ lead, onClose }) {
           </div>
         </div>
 
-        <div className="flex gap-2 px-5 py-4 border-t border-slate-200 shrink-0">
-          <button className="flex-1 flex items-center justify-center gap-1.5 bg-brand-600 rounded-lg py-2 text-xs text-white shadow-sm hover:shadow-md hover:bg-brand-500 transition-all duration-200 ease-out">
+        <div className="flex gap-2 px-5 py-4 border-t border-slate-200 shrink-0 relative">
+          {statusOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setStatusOpen(false)} />
+              <div className="absolute z-20 bottom-full mb-2 left-5 right-5 bg-white border border-slate-200 rounded-lg shadow-elevated overflow-hidden">
+                {leadStatusOrder.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => handleChangeStatus(s)}
+                    className="w-full flex items-center justify-between gap-2 px-3.5 py-2 text-xs text-left text-slate-700 hover:bg-slate-50"
+                  >
+                    {s}
+                    {s === lead.status && <Check size={13} className="text-brand-600" />}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          <button
+            onClick={() => setStatusOpen((v) => !v)}
+            className="flex-1 flex items-center justify-center gap-1.5 bg-brand-600 rounded-lg py-2 text-xs text-white hover:bg-brand-500"
+          >
             <Send size={13} /> Cập nhật trạng thái
+            <ChevronDown size={13} className={statusOpen ? "rotate-180 transition-transform" : "transition-transform"} />
           </button>
         </div>
       </div>
