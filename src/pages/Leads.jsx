@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
@@ -22,6 +22,7 @@ import {
   Trash2,
   Users,
   SearchX,
+  Loader2,
 } from "lucide-react";
 import Pill from "../components/ui/Pill.jsx";
 import Avatar from "../components/ui/Avatar.jsx";
@@ -30,21 +31,13 @@ import ConfirmDialog from "../components/ui/ConfirmDialog.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 import { LeadListSkeleton } from "../components/ui/Skeleton.jsx";
 import { useToast } from "../components/ui/ToastProvider.jsx";
-import { leads, statusStyle, classStyle, leadStatusOrder } from "../data/mockData.js";
-import { scoreLead, classify } from "../utils/leadScoring.js";
+import { statusStyle, classStyle, leadStatusOrder } from "../data/mockData.js";
+import { fetchLeads, createLead, deleteLead, importLeads, exportLeadsCsv } from "../services/leadService.js";
+import { validateLeadForm, hasErrors } from "../utils/validators.js";
 import { exportToCsv } from "../utils/exportCsv.js";
 import { importLeadsFromCsv } from "../utils/importCsv.js";
 
 const pageSize = 6;
-
-// Ánh xạ lựa chọn "Thời gian dự kiến đăng ký" trên form -> mã tín hiệu
-// enrollmentIntent dùng cho engine chấm điểm (Nhóm B).
-const enrollmentIntentMap = {
-  "Trong 7 ngày": "7d",
-  "Trong 30 ngày": "30d",
-  "1–3 tháng": "1-3m",
-  "Chưa có nhu cầu trong 6 tháng": "6m+",
-};
 
 // Các cột có thể sắp xếp (kiểu FC Online):
 //   key  -> trường dữ liệu của lead
@@ -61,22 +54,14 @@ const sortableColumns = [
   { key: "date", label: "Ngày tạo", type: "date" },
 ];
 
-// Lấy giá trị để so sánh theo từng cột
-function getSortValue(l, key) {
-  if (key === "date") {
-    // date có dạng "12/05/2026 09:15" hoặc "12/05/2026" -> chuyển về timestamp
-    const [datePart, timePart = "00:00"] = String(l.date || "").split(" ");
-    const [d, m, y] = datePart.split("/").map(Number);
-    const [hh, mm] = timePart.split(":").map(Number);
-    return new Date(y, (m || 1) - 1, d || 1, hh || 0, mm || 0).getTime();
-  }
-  return l[key];
-}
-
 export default function Leads() {
   const navigate = useNavigate();
   const toast = useToast();
   const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [queryInput, setQueryInput] = useState("");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("Tất cả");
   const [classFilter, setClassFilter] = useState("Tất cả");
@@ -86,15 +71,45 @@ export default function Leads() {
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importMsg, setImportMsg] = useState("");
+  const [importing, setImporting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [refreshTick, forceRefresh] = useState(0);
 
-  // Mô phỏng gọi API tải danh sách lead — hiện skeleton một nhịp ngắn
-  // trước khi hiển thị dữ liệu thật (đúng hành vi UI khi có backend thật).
+  // Debounce ô tìm kiếm 300ms trước khi gọi API — tránh gọi liên tục theo từng phím gõ.
   useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 600);
+    const t = setTimeout(() => {
+      setQuery(queryInput);
+      setPage(1);
+    }, 300);
     return () => clearTimeout(t);
-  }, []);
+  }, [queryInput]);
+
+  // GET /api/leads — tải danh sách theo query/filter/sort/page hiện tại (xem leadService.js).
+  // Đây là nơi DUY NHẤT gọi API tải danh sách; mọi thay đổi bộ lọc/trang chỉ cần
+  // cập nhật state ở trên, effect này sẽ tự tải lại.
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setListError(null);
+    fetchLeads({ query, status: statusFilter, cls: classFilter, sortKey, sortDir, page, pageSize })
+      .then(({ items, total: t }) => {
+        if (cancelled) return;
+        setRows(items);
+        setTotal(t);
+      })
+      .catch((err) => {
+        if (!cancelled) setListError(err.message || "Không thể tải danh sách lead.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [query, statusFilter, classFilter, sortKey, sortDir, page, refreshTick]);
+
   const emptyForm = {
     // Bắt buộc
     name: "",
@@ -118,42 +133,8 @@ export default function Leads() {
   const statuses = ["Tất cả", ...leadStatusOrder];
   const classes = ["Tất cả", "Lead nóng", "Lead ấm", "Lead lạnh", "Không hợp lệ"];
 
-  // Lọc + sắp xếp cùng lúc, KHÔNG tải lại trang, giữ nguyên bộ lọc/tìm kiếm
-  const filtered = useMemo(() => {
-    let rows = leads.filter((l) => {
-      const matchQ =
-        !query ||
-        l.name.toLowerCase().includes(query.toLowerCase()) ||
-        l.course.toLowerCase().includes(query.toLowerCase()) ||
-        l.email.toLowerCase().includes(query.toLowerCase());
-      const matchS = statusFilter === "Tất cả" || l.status === statusFilter;
-      const matchC = classFilter === "Tất cả" || l.cls === classFilter;
-      return matchQ && matchS && matchC;
-    });
-
-    // Sắp xếp chỉ khi có sortKey + sortDir được chọn
-    if (sortKey && sortDir) {
-      const col = sortableColumns.find((c) => c.key === sortKey);
-      const dir = sortDir === "asc" ? 1 : -1;
-      rows = [...rows].sort((a, b) => {
-        let va = getSortValue(a, sortKey);
-        let vb = getSortValue(b, sortKey);
-
-        if (col.type === "number") {
-          return (va - vb) * dir;
-        }
-        // Chuỗi: dùng localeCompare('vi') để xếp đúng dấu tiếng Việt (vd: chữ Đ)
-        const sa = String(va ?? "");
-        const sb = String(vb ?? "");
-        return sa.localeCompare(sb, "vi", { sensitivity: "base" }) * dir;
-      });
-    }
-
-    return rows;
-  }, [query, statusFilter, classFilter, sortKey, sortDir, refreshTick]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const pageRows = rows;
 
   const resetPage = () => setPage(1);
 
@@ -186,12 +167,14 @@ export default function Leads() {
     return <ArrowUpDown size={13} className="text-slate-300" />;
   };
 
-  const handleExport = () => {
-    exportToCsv(
-      filtered,
-      ["name", "course", "source", "status", "score", "cls", "date", "phone", "email"],
-      "r2s-leads.csv"
-    );
+  // GET /api/export/leads.csv — xuất theo đúng bộ lọc đang áp dụng (không chỉ trang hiện tại)
+  const handleExport = async () => {
+    try {
+      const items = await exportLeadsCsv({ query, status: statusFilter, cls: classFilter });
+      exportToCsv(items, ["name", "course", "source", "status", "score", "cls", "date", "phone", "email"], "r2s-leads.csv");
+    } catch (err) {
+      toast.error(err.message || "Xuất CSV thất bại.");
+    }
   };
 
   const handleImportFile = (e) => {
@@ -200,7 +183,7 @@ export default function Leads() {
     setImportMsg("");
 
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       const text = ev.target.result;
       const imported = importLeadsFromCsv(text);
       if (imported.length === 0) {
@@ -208,13 +191,20 @@ export default function Leads() {
         toast.error("Import CSV thất bại: không tìm thấy lead hợp lệ nào trong file.");
         return;
       }
-      // Thêm các lead nhập vào (đảo ngược để giữ thứ tự ban đầu)
-      imported.reverse().forEach((l) => leads.unshift(l));
-      setImportMsg(`Đã nhập thành công ${imported.length} lead từ file CSV.`);
-      toast.success(`Import CSV hoàn tất — đã thêm ${imported.length} lead.`);
-      resetPage();
-      setShowImport(false);
-      forceRefresh((n) => n + 1);
+      setImporting(true);
+      try {
+        await importLeads(imported);
+        setImportMsg(`Đã nhập thành công ${imported.length} lead từ file CSV.`);
+        toast.success(`Import CSV hoàn tất — đã thêm ${imported.length} lead.`);
+        resetPage();
+        setShowImport(false);
+        forceRefresh((n) => n + 1);
+      } catch (err) {
+        setImportMsg(err.message || "Import CSV thất bại.");
+        toast.error(err.message || "Import CSV thất bại.");
+      } finally {
+        setImporting(false);
+      }
     };
     reader.onerror = () => {
       setImportMsg("Không thể đọc file. Vui lòng thử lại.");
@@ -225,81 +215,46 @@ export default function Leads() {
     e.target.value = "";
   };
 
-  // Thông tin lead bắt buộc theo Module 2 (Kế hoạch triển khai):
-  // Họ và tên, Số điện thoại HOẶC Email (ít nhất một), Khóa học quan tâm, Nguồn tiếp cận.
-  // Ngày tạo và Trạng thái do hệ thống tự sinh, không cần người dùng nhập.
-  const validateForm = () => {
-    const errors = {};
-    if (!form.name.trim()) errors.name = "Vui lòng nhập họ và tên.";
-    if (!form.course.trim()) errors.course = "Vui lòng chọn khóa học quan tâm.";
-    if (!form.source.trim()) errors.source = "Vui lòng chọn nguồn tiếp cận.";
-    if (!form.phone.trim() && !form.email.trim()) {
-      errors.contact = "Cần ít nhất một trong hai: Số điện thoại hoặc Email.";
-    }
-    return errors;
-  };
-
-  const handleAdd = (e) => {
+  const handleAdd = async (e) => {
     e.preventDefault();
-    const errors = validateForm();
-    if (Object.keys(errors).length > 0) {
+    // Validate theo Module 2 (Họ tên, Khóa học, Nguồn bắt buộc; SĐT/Email đúng
+    // định dạng nếu có nhập) — dùng chung utils/validators.js với Login/Register.
+    const errors = validateLeadForm(form);
+    if (hasErrors(errors)) {
       setFormErrors(errors);
       return;
     }
     setFormErrors({});
-
-    // Xây tín hiệu chấm điểm (Nhóm A–D) từ đúng những gì người dùng đã điền,
-    // để điểm/phân loại luôn nhất quán với engine chung (leadScoring.js).
-    const newLead = {
-      id: Date.now(),
-      name: form.name.trim(),
-      course: form.course,
-      source: form.source,
-      status: "Lead mới",
-      date: new Date().toLocaleDateString("vi-VN"),
-      phone: form.phone.trim() || "—",
-      email: form.email.trim() || "—",
-      assignee: "Tư vấn viên A",
-      // Thông tin mở rộng — chỉ lưu nếu người dùng có điền
-      school: form.school.trim() || undefined,
-      currentLevel: form.currentLevel || undefined,
-      studyGoal: form.studyGoal.trim() || undefined,
-      expectedEnrollment: form.expectedEnrollment || undefined,
-      city: form.city.trim() || undefined,
-      preferredContactTime: form.preferredContactTime || undefined,
-      note: form.note.trim() || undefined,
-      initials: form.name.trim().split(" ").slice(-2).map((w) => w[0]).join("").toUpperCase(),
-      signals: {
-        fitCourseDefined: true,
-        fitCareerGoal: !!form.studyGoal.trim(),
-        hasFullContact: !!(form.phone.trim() && form.email.trim()),
-        enrollmentIntent: enrollmentIntentMap[form.expectedEnrollment] || "unknown",
-      },
-    };
-    newLead.score = scoreLead(newLead);
-    newLead.cls = classify(newLead.score, newLead);
-
-    // Demo: thêm lead vào đầu danh sách
-    leads.unshift(newLead);
-    setShowAdd(false);
-    setShowExtended(false);
-    setForm(emptyForm);
-    toast.success("Tạo lead thành công.");
-    forceRefresh((n) => n + 1);
+    setSubmitting(true);
+    try {
+      await createLead(form);
+      setShowAdd(false);
+      setShowExtended(false);
+      setForm(emptyForm);
+      toast.success("Tạo lead thành công.");
+      resetPage();
+      forceRefresh((n) => n + 1);
+    } catch (err) {
+      if (err.fieldErrors) setFormErrors(err.fieldErrors);
+      toast.error(err.message || "Tạo lead thất bại.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDeleteLead = () => {
+  const handleDeleteLead = async () => {
     if (!deleteTarget) return;
-    const idx = leads.findIndex((l) => l.id === deleteTarget.id);
-    if (idx === -1) {
-      toast.error("Xóa thất bại: không tìm thấy lead.");
+    setDeleting(true);
+    try {
+      await deleteLead(deleteTarget.id);
+      toast.success(`Đã xóa lead "${deleteTarget.name}" thành công.`);
       setDeleteTarget(null);
-      return;
+      forceRefresh((n) => n + 1);
+    } catch (err) {
+      toast.error(err.message || "Xóa thất bại.");
+    } finally {
+      setDeleting(false);
     }
-    leads.splice(idx, 1);
-    toast.success(`Đã xóa lead "${deleteTarget.name}" thành công.`);
-    setDeleteTarget(null);
-    forceRefresh((n) => n + 1);
   };
 
   return (
@@ -347,8 +302,8 @@ export default function Leads() {
         <div className="relative flex-1 min-w-[200px]">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
-            value={query}
-            onChange={(e) => { setQuery(e.target.value); resetPage(); }}
+            value={queryInput}
+            onChange={(e) => setQueryInput(e.target.value)}
             placeholder="Tìm theo tên, khóa học, email..."
             className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-brand-500 focus:bg-white"
           />
@@ -381,7 +336,14 @@ export default function Leads() {
       {/* Table */}
       {loading ? (
         <LeadListSkeleton />
-      ) : leads.length === 0 ? (
+      ) : listError ? (
+        <EmptyState
+          icon={AlertCircle}
+          title="Không thể tải danh sách lead"
+          description={listError}
+          action={{ label: "Thử lại", onClick: () => forceRefresh((n) => n + 1) }}
+        />
+      ) : total === 0 && !query && statusFilter === "Tất cả" && classFilter === "Tất cả" ? (
         <div className="bg-white border border-slate-200 rounded-xl shadow-card">
           <EmptyState
             icon={Users}
@@ -470,9 +432,9 @@ export default function Leads() {
         {/* Pagination */}
         <div className="flex items-center justify-between px-4 py-3 text-xs text-slate-500">
           <span>
-            {filtered.length === 0
+            {total === 0
               ? "0 kết quả"
-              : `Hiển thị ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, filtered.length)} của ${filtered.length}`}
+              : `Hiển thị ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} của ${total}`}
           </span>
           <div className="flex items-center gap-1">
             <button
@@ -513,6 +475,7 @@ export default function Leads() {
         message={deleteTarget ? `Bạn có chắc chắn muốn xóa lead "${deleteTarget.name}"? Toàn bộ lịch sử chăm sóc liên quan cũng sẽ không còn hiển thị.` : ""}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={handleDeleteLead}
+        loading={deleting}
       />
 
       {/* Import CSV Modal */}
@@ -530,13 +493,19 @@ export default function Leads() {
                 {importMsg}
               </div>
             )}
-            <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-300 rounded-xl p-8 cursor-pointer hover:border-brand-500 hover:bg-slate-50 transition-colors">
-              <FileUp size={28} className="text-brand-600" />
-              <span className="text-sm text-slate-600 font-medium">Chọn file CSV để tải lên</span>
+            <label className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl p-8 transition-colors ${importing ? "border-slate-200 opacity-60 cursor-not-allowed" : "border-slate-300 cursor-pointer hover:border-brand-500 hover:bg-slate-50"}`}>
+              {importing ? (
+                <Loader2 size={28} className="text-brand-600 animate-spin" />
+              ) : (
+                <FileUp size={28} className="text-brand-600" />
+              )}
+              <span className="text-sm text-slate-600 font-medium">
+                {importing ? "Đang nhập dữ liệu..." : "Chọn file CSV để tải lên"}
+              </span>
               <span className="text-xs text-slate-400 text-center">
                 Hỗ trợ cột tiếng Anh (name, course, source, phone, email...) và tiếng Việt (Họ tên, Khóa học, Số điện thoại...)
               </span>
-              <input type="file" accept=".csv,text/csv" onChange={handleImportFile} className="hidden" />
+              <input type="file" accept=".csv,text/csv" onChange={handleImportFile} disabled={importing} className="hidden" />
             </label>
             <div className="flex gap-2 pt-4">
               <button
@@ -636,9 +605,10 @@ export default function Leads() {
                     onChange={(e) => setForm({ ...form, phone: e.target.value })}
                     placeholder="0900 000 000"
                     className={`w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 ${
-                      formErrors.contact ? "border-red-300" : "border-slate-200"
+                      formErrors.contact || formErrors.phone ? "border-red-300" : "border-slate-200"
                     }`}
                   />
+                  {formErrors.phone && <p className="text-[11px] text-red-600 mt-1">{formErrors.phone}</p>}
                 </div>
                 <div>
                   <label className="text-xs text-slate-500 block mb-1">Email *</label>
@@ -647,9 +617,10 @@ export default function Leads() {
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
                     placeholder="email@gmail.com"
                     className={`w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 ${
-                      formErrors.contact ? "border-red-300" : "border-slate-200"
+                      formErrors.contact || formErrors.email ? "border-red-300" : "border-slate-200"
                     }`}
                   />
+                  {formErrors.email && <p className="text-[11px] text-red-600 mt-1">{formErrors.email}</p>}
                 </div>
               </div>
               <p className="text-[11px] text-slate-400 -mt-2">* Cần điền ít nhất một trong hai: số điện thoại hoặc email.</p>
@@ -761,9 +732,11 @@ export default function Leads() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-brand-600 hover:bg-brand-500 rounded-lg py-2 text-sm text-white"
+                  disabled={submitting}
+                  className="flex-1 bg-brand-600 hover:bg-brand-500 rounded-lg py-2 text-sm text-white disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
                 >
-                  Thêm lead
+                  {submitting && <Loader2 size={14} className="animate-spin" />}
+                  {submitting ? "Đang lưu..." : "Thêm lead"}
                 </button>
               </div>
             </form>

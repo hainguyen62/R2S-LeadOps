@@ -12,6 +12,7 @@ export default function ConfirmDialog({
   confirmLabel = "Xóa",
   cancelLabel = "Hủy",
   danger = true,
+  loading = false,
   onCancel,
   onConfirm,
 }) {
@@ -57,18 +58,20 @@ export default function ConfirmDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="flex-1 border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50"
+            disabled={loading}
+            className="flex-1 border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-60"
           >
             {cancelLabel}
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className={`flex-1 rounded-lg py-2 text-sm text-white font-medium ${
+            disabled={loading}
+            className={`flex-1 rounded-lg py-2 text-sm text-white font-medium disabled:opacity-60 ${
               danger ? "bg-red-600 hover:bg-red-500" : "bg-brand-600 hover:bg-brand-500"
             }`}
           >
-            {confirmLabel}
+            {loading ? "Đang xử lý..." : confirmLabel}
           </button>
         </div>
       </div>

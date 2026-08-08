@@ -76,3 +76,13 @@ shadow, border, typography weight/contrast, hover/focus/transition.
 ## Ghi chú
 - Không đổi màu brand, font, bố cục, UX.
 - Không đụng landing, Login/Register, dữ liệu.
+
+## API Integration (chờ Back-end TTS2) — Front-end đã sẵn sàng
+
+- [x] Tầng service `src/services/` (auth/lead/campaign/dashboard/settings) — mọi page gọi qua đây, không import `mockData` trực tiếp nữa (trừ các style map tĩnh như `statusStyle`).
+- [x] `apiClient.js` — chuyển `VITE_USE_MOCK=false` trong `.env` để dùng API thật, không cần sửa UI.
+- [x] `utils/validators.js` — validate dùng chung cho Login/Register/Leads (đúng định dạng email/phone, khớp Mục VI/XVI kế hoạch).
+- [x] Loading/Error/Empty state cho toàn bộ trang tải dữ liệu (Dashboard, Leads, LeadDetail, Campaigns, CampaignDetails, History, Reports, Settings, Profile).
+- [x] Unit test cơ bản (`npm run test`) cho leadScoring, validators, leadService.
+- [ ] Kết nối thật với Back-end khi TTS2 gửi Swagger — đối chiếu lại field name response thực tế với `services/*.js`.
+- [ ] Viết thêm Front-end Test cho component (hiện chỉ có test cho utils/services, chưa test render UI).

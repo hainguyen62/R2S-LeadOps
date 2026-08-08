@@ -1,7 +1,11 @@
-import { UserCheck, Phone, Mail, MessageCircle, GitBranch, Plus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { UserCheck, Phone, Mail, MessageCircle, GitBranch, Plus, AlertCircle } from "lucide-react";
 import Avatar from "../components/ui/Avatar.jsx";
 import Pill from "../components/ui/Pill.jsx";
-import { leads, statusStyle } from "../data/mockData.js";
+import { SkeletonBlock } from "../components/ui/Skeleton.jsx";
+import EmptyState from "../components/ui/EmptyState.jsx";
+import { statusStyle } from "../data/mockData.js";
+import { fetchAllActivities } from "../services/leadService.js";
 
 const iconMap = {
   "Đã gọi điện": Phone,
@@ -11,18 +15,29 @@ const iconMap = {
   "Tạo lead": Plus,
 };
 
-const allHistory = [
-  ...leads.flatMap((l) =>
-    (l.history || []).map((h) => ({ ...h, leadName: l.name, initials: l.initials }))
-  ),
-  { text: "Đã gọi điện", channel: "Tư vấn viên A", date: "12/05/2026 10:30", leadName: "Nguyễn Minh Anh", initials: "NA" },
-  { text: "Đã gửi email", channel: "Tư vấn viên B", date: "12/05/2026 09:45", leadName: "Lê Thu Hà", initials: "LH" },
-  { text: "Chuyển trạng thái sang Đã đăng ký", channel: "Tư vấn viên A", date: "12/05/2026 09:15", leadName: "Ngô Bảo Châu", initials: "NC" },
-  { text: "Đã nhắn tin", channel: "Tư vấn viên C", date: "12/05/2026 08:40", leadName: "Đặng Thảo Vy", initials: "DV" },
-  { text: "Tạo lead", channel: "Facebook Ads", date: "11/05/2026 18:40", leadName: "Hoàng Mai Linh", initials: "ML" },
-].sort((a, b) => (a.date < b.date ? 1 : -1));
-
 export default function History() {
+  const [allHistory, setAllHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Gộp từ GET /api/leads/{id}/activities của toàn bộ lead — xem leadService.js
+  useEffect(() => {
+    let cancelled = false;
+    fetchAllActivities()
+      .then((data) => {
+        if (!cancelled) setAllHistory(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || "Không thể tải lịch sử chăm sóc.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="space-y-6">
       <div>
@@ -31,6 +46,17 @@ export default function History() {
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-card">
+        {loading ? (
+          <div className="space-y-4">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <SkeletonBlock key={i} className="h-12" />
+            ))}
+          </div>
+        ) : error ? (
+          <EmptyState icon={AlertCircle} title="Không thể tải lịch sử" description={error} compact />
+        ) : allHistory.length === 0 ? (
+          <EmptyState icon={UserCheck} title="Chưa có hoạt động chăm sóc nào" compact />
+        ) : (
         <div className="space-y-1">
           {allHistory.map((h, i) => {
             const Icon = iconMap[h.text.split(" ")[0]] || UserCheck;
@@ -57,6 +83,7 @@ export default function History() {
             );
           })}
         </div>
+        )}
       </div>
 
       {/* Quick status legend */}

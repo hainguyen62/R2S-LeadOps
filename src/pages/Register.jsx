@@ -1,19 +1,15 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { User, Phone, Mail, BookOpen, ShieldCheck, Send, AlertTriangle } from "lucide-react";
+import { User, Phone, Mail, BookOpen, ShieldCheck, Send, AlertTriangle, Loader2 } from "lucide-react";
 import PublicHeader from "../components/layout/PublicHeader.jsx";
-import { leads } from "../data/mockData.js";
-import { scoreLead, classify } from "../utils/leadScoring.js";
+import { createLead, findDuplicateLead } from "../services/leadService.js";
+import { isValidPhone, isValidEmail } from "../utils/validators.js";
 
 const courses = [
   "ReactJS & Frontend",
   "Node.js & Backend",
   "AWS Cloud Computing",
 ];
-
-// Chuẩn hóa số điện thoại VN về dạng chỉ số, để so khớp trùng lead dù
-// người dùng nhập có khoảng trắng/dấu gạch khác nhau.
-const digitsOnly = (v) => (v || "").replace(/\D/g, "");
 
 export default function Register() {
   const navigate = useNavigate();
@@ -24,77 +20,65 @@ export default function Register() {
     course: "",
   });
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  // Kiểm tra trùng lead theo số điện thoại HOẶC email (đã chuẩn hóa),
-  // trả về lead trùng đầu tiên tìm thấy cùng với lý do trùng cụ thể.
-  const findDuplicate = (phone, email) => {
-    const phoneDigits = digitsOnly(phone);
-    const emailLower = (email || "").trim().toLowerCase();
-    for (const l of leads) {
-      const samePhone = phoneDigits && digitsOnly(l.phone) === phoneDigits;
-      const sameEmail = emailLower && (l.email || "").trim().toLowerCase() === emailLower;
-      if (samePhone || sameEmail) {
-        return { lead: l, samePhone, sameEmail };
-      }
-    }
-    return null;
-  };
-
-  const handleSubmit = (e) => {
+  // Luồng "Tiếp nhận lead từ Form/Landing Page" (Mục XIII.1 kế hoạch):
+  // Front-end validate -> kiểm tra trùng -> tạo lead qua leadService (POST /api/leads).
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
-    if (!form.fullName || !form.phone || !form.email || !form.course) {
+    if (!form.fullName.trim() || !form.phone.trim() || !form.email.trim() || !form.course) {
       setError("Đăng ký thất bại: vui lòng điền đầy đủ thông tin và chọn khóa học.");
       return;
     }
-
-    const duplicate = findDuplicate(form.phone, form.email);
-    if (duplicate) {
-      const { lead, samePhone, sameEmail } = duplicate;
-      const reason =
-        samePhone && sameEmail
-          ? "số điện thoại và email này"
-          : samePhone
-            ? "số điện thoại này"
-            : "email này";
-      setError(
-        `Đăng ký thất bại: ${reason} đã tồn tại trong hệ thống (lead "${lead.name}", trạng thái "${lead.status}", phụ trách bởi ${lead.assignee}). Vui lòng chờ tư vấn viên liên hệ hoặc dùng thông tin liên hệ khác.`
-      );
+    if (!isValidPhone(form.phone)) {
+      setError("Đăng ký thất bại: số điện thoại không đúng định dạng (vd: 0901234567).");
+      return;
+    }
+    if (!isValidEmail(form.email)) {
+      setError("Đăng ký thất bại: email không đúng định dạng.");
       return;
     }
 
-    // Tạo lead mới, chấm điểm và phân loại tự động theo cùng luật với
-    // trang Quản lý Lead (dựa trên tín hiệu ban đầu: đã xác định khóa học +
-    // có đầy đủ SĐT/email, chưa rõ thời gian đăng ký), để tránh 2 nơi tính điểm khác nhau.
-    const newLead = {
-      id: Date.now(),
-      name: form.fullName.trim(),
-      course: form.course,
-      source: "Landing Page",
-      status: "Lead mới",
-      date: new Date().toLocaleString("vi-VN"),
-      phone: form.phone.trim(),
-      email: form.email.trim(),
-      assignee: "Chưa phân công",
-      signals: {
-        fitCourseDefined: true,
-        hasFullContact: true,
-        enrollmentIntent: "unknown",
-      },
-    };
-    newLead.score = scoreLead(newLead);
-    newLead.cls = classify(newLead.score, newLead);
-    newLead.initials = newLead.name.split(" ").slice(-2).map((w) => w[0]).join("").toUpperCase();
-    leads.unshift(newLead);
+    setSubmitting(true);
+    try {
+      const duplicate = await findDuplicateLead({ phone: form.phone, email: form.email });
+      if (duplicate) {
+        const { lead, samePhone, sameEmail } = duplicate;
+        const reason =
+          samePhone && sameEmail
+            ? "số điện thoại và email này"
+            : samePhone
+              ? "số điện thoại này"
+              : "email này";
+        setError(
+          `Đăng ký thất bại: ${reason} đã tồn tại trong hệ thống (lead "${lead.name}", trạng thái "${lead.status}", phụ trách bởi ${lead.assignee}). Vui lòng chờ tư vấn viên liên hệ hoặc dùng thông tin liên hệ khác.`
+        );
+        return;
+      }
 
-    setSubmitted(true);
-    setTimeout(() => navigate("/login"), 1200);
+      await createLead({
+        name: form.fullName,
+        course: form.course,
+        source: "Landing Page",
+        phone: form.phone,
+        email: form.email,
+        assignee: "Chưa phân công",
+      });
+
+      setSubmitted(true);
+      setTimeout(() => navigate("/login"), 1200);
+    } catch (err) {
+      setError(err.message || "Đăng ký thất bại. Vui lòng thử lại.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const inputBase =
@@ -207,10 +191,11 @@ export default function Register() {
 
                 <button
                   type="submit"
-                  className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-brand-700 py-2.5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-brand-600 active:bg-brand-800"
+                  disabled={submitting}
+                  className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-brand-700 py-2.5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-brand-600 active:bg-brand-800 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <Send size={16} />
-                  Gửi thông tin
+                  {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  {submitting ? "Đang gửi..." : "Gửi thông tin"}
                 </button>
               </form>
             )}

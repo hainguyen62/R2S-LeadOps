@@ -1,8 +1,10 @@
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { Flame, Droplet } from "lucide-react";
 import ChartCard from "../ui/ChartCard.jsx";
 import Avatar from "../ui/Avatar.jsx";
-import { leads } from "../../data/mockData.js";
+import { SkeletonBlock } from "../ui/Skeleton.jsx";
+import EmptyState from "../ui/EmptyState.jsx";
+import { fetchHotLeads } from "../../services/dashboardService.js";
 import { priorityTier } from "../../utils/leadScoring.js";
 
 // 3 cấp độ ưu tiên — icon & màu khác nhau đủ rõ để nhận biết ngay từ xa,
@@ -32,10 +34,24 @@ const priorityStyles = {
 };
 
 export default function HotLeadsPanel({ selectedId, onSelect, onViewAll, limit = 5 }) {
-  const topLeads = useMemo(
-    () => [...leads].sort((a, b) => b.score - a.score).slice(0, limit),
-    [limit]
-  );
+  const [topLeads, setTopLeads] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // GET /api/dashboard/hot-leads — xem services/dashboardService.js
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetchHotLeads(limit)
+      .then((data) => {
+        if (!cancelled) setTopLeads(data);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [limit]);
 
   return (
     <ChartCard
@@ -49,6 +65,21 @@ export default function HotLeadsPanel({ selectedId, onSelect, onViewAll, limit =
         </button>
       }
     >
+      {loading ? (
+        <div className="space-y-2.5 mt-1">
+          {Array.from({ length: limit }).map((_, i) => (
+            <div key={i} className="flex items-center gap-2.5 px-2 py-1">
+              <SkeletonBlock className="w-[30px] h-[30px] rounded-full shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <SkeletonBlock className="w-2/3 h-3" />
+                <SkeletonBlock className="w-1/3 h-2.5" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : topLeads.length === 0 ? (
+        <EmptyState compact title="Chưa có lead cần ưu tiên" description="Danh sách sẽ hiện khi có lead nóng hoặc ấm." />
+      ) : (
       <div className="space-y-1 mt-1">
         {topLeads.map((l) => {
           const tier = priorityTier(l.score);
@@ -84,6 +115,7 @@ export default function HotLeadsPanel({ selectedId, onSelect, onViewAll, limit =
           );
         })}
       </div>
+      )}
     </ChartCard>
   );
 }

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   AreaChart,
   Area,
@@ -11,7 +12,8 @@ import {
   Cell,
 } from "recharts";
 import ChartCard from "../ui/ChartCard.jsx";
-import { leadsByDay, classification } from "../../data/mockData.js";
+import { SkeletonBlock } from "../ui/Skeleton.jsx";
+import { fetchLeadsByDay, fetchLeadsByStatusClassification } from "../../services/dashboardService.js";
 
 const tooltipStyle = {
   background: "#ffffff",
@@ -24,7 +26,41 @@ const tooltipStyle = {
 };
 
 export default function LeadCharts() {
+  const [leadsByDay, setLeadsByDay] = useState([]);
+  const [classification, setClassification] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // GET /api/dashboard/leads-by-course (theo ngày) + leads-by-status — xem dashboardService.js
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([fetchLeadsByDay(), fetchLeadsByStatusClassification()])
+      .then(([byDay, byClass]) => {
+        if (cancelled) return;
+        setLeadsByDay(byDay);
+        setClassification(byClass);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const totalClass = classification.reduce((a, c) => a + c.value, 0);
+
+  if (loading) {
+    return (
+      <>
+        <ChartCard title="Lead theo ngày" className="lg:col-span-2">
+          <SkeletonBlock className="w-full h-[240px]" />
+        </ChartCard>
+        <ChartCard title="Phân loại lead">
+          <SkeletonBlock className="w-full h-[220px] rounded-full mx-auto" />
+        </ChartCard>
+      </>
+    );
+  }
 
   return (
     <>

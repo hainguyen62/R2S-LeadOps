@@ -1,10 +1,12 @@
-import { useMemo, useState } from "react";
-import { Users, Activity, Bell, Link, ExternalLink, Pencil, Trash2, X, ShieldCheck, Check, Info, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Users, Activity, Bell, Link, ExternalLink, Pencil, Trash2, X, ShieldCheck, Check, Info, ArrowUpDown, ArrowUp, ArrowDown, AlertCircle, Loader2 } from "lucide-react";
 import Avatar from "../components/ui/Avatar.jsx";
 import Pill from "../components/ui/Pill.jsx";
 import ConfirmDialog from "../components/ui/ConfirmDialog.jsx";
+import EmptyState from "../components/ui/EmptyState.jsx";
+import { SkeletonBlock } from "../components/ui/Skeleton.jsx";
 import { useToast } from "../components/ui/ToastProvider.jsx";
-import { users, activityLogs } from "../data/mockData.js";
+import { fetchUsers, updateUser, deleteUser, fetchActivityLogs } from "../services/settingsService.js";
 
 const roleStyle = {
   Admin: "bg-red-50 text-red-700",
@@ -49,12 +51,61 @@ const defaultMatrix = {
 export default function Settings() {
   const toast = useToast();
   const [tab, setTab] = useState("users");
-  const [userList, setUserList] = useState(users);
+  const [userList, setUserList] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [usersError, setUsersError] = useState(null);
+  const [activityLogs, setActivityLogs] = useState([]);
+  const [loadingLogs, setLoadingLogs] = useState(true);
+  const [logsError, setLogsError] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
+  const [savingUser, setSavingUser] = useState(false);
   const [form, setForm] = useState({ name: "", role: "", email: "" });
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletingUser, setDeletingUser] = useState(false);
   const [matrix, setMatrix] = useState(defaultMatrix);
   const [matrixDirty, setMatrixDirty] = useState(false);
+  const [refreshTick, forceRefresh] = useState(0);
+
+  // GET /api/users — xem services/settingsService.js
+  useEffect(() => {
+    if (tab !== "users") return;
+    let cancelled = false;
+    setLoadingUsers(true);
+    setUsersError(null);
+    fetchUsers()
+      .then((data) => {
+        if (!cancelled) setUserList(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setUsersError(err.message || "Không thể tải danh sách tài khoản.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingUsers(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, refreshTick]);
+
+  // GET /api/audit-logs — xem services/settingsService.js
+  useEffect(() => {
+    if (tab !== "logs") return;
+    let cancelled = false;
+    setLoadingLogs(true);
+    fetchActivityLogs()
+      .then((data) => {
+        if (!cancelled) setActivityLogs(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setLogsError(err.message || "Không thể tải nhật ký hoạt động.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingLogs(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab]);
 
   // Sắp xếp cột kiểu FC Online — giống trang Quản lý Lead
   const [sortKey, setSortKey] = useState(null);
@@ -100,25 +151,33 @@ export default function Settings() {
     setForm({ name: user.name, role: user.role, email: user.email });
   };
 
-  const saveEdit = () => {
-    setUserList((list) =>
-      list.map((u) => (u.id === editingUser.id ? { ...u, ...form } : u))
-    );
-    setEditingUser(null);
-    toast.success("Cập nhật tài khoản thành công.");
+  const saveEdit = async () => {
+    setSavingUser(true);
+    try {
+      const updated = await updateUser(editingUser.id, form);
+      setUserList((list) => list.map((u) => (u.id === editingUser.id ? updated : u)));
+      setEditingUser(null);
+      toast.success("Cập nhật tài khoản thành công.");
+    } catch (err) {
+      toast.error(err.message || "Cập nhật tài khoản thất bại.");
+    } finally {
+      setSavingUser(false);
+    }
   };
 
-  const handleDeleteUser = () => {
+  const handleDeleteUser = async () => {
     if (!deleteTarget) return;
-    // Không cho phép xóa tài khoản Admin — minh họa rõ trường hợp "Xóa thất bại".
-    if (deleteTarget.role === "Admin") {
-      toast.error("Xóa thất bại: không thể xóa tài khoản Admin.");
+    setDeletingUser(true);
+    try {
+      await deleteUser(deleteTarget.id);
+      setUserList((list) => list.filter((u) => u.id !== deleteTarget.id));
+      toast.success(`Đã xóa tài khoản "${deleteTarget.name}" thành công.`);
       setDeleteTarget(null);
-      return;
+    } catch (err) {
+      toast.error(err.message || "Xóa thất bại.");
+    } finally {
+      setDeletingUser(false);
     }
-    setUserList((list) => list.filter((u) => u.id !== deleteTarget.id));
-    toast.success(`Đã xóa tài khoản "${deleteTarget.name}" thành công.`);
-    setDeleteTarget(null);
   };
 
   const togglePermission = (module, role) => {
@@ -162,6 +221,16 @@ export default function Settings() {
 
       {/* Users tab */}
       {tab === "users" && (
+        loadingUsers ? (
+          <SkeletonBlock className="h-[300px] rounded-xl" />
+        ) : usersError ? (
+          <EmptyState
+            icon={AlertCircle}
+            title="Không thể tải danh sách tài khoản"
+            description={usersError}
+            action={{ label: "Thử lại", onClick: () => forceRefresh((n) => n + 1) }}
+          />
+        ) : (
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-card">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -223,6 +292,7 @@ export default function Settings() {
             </table>
           </div>
         </div>
+        )
       )}
 
       {/* Permissions tab */}
@@ -285,6 +355,11 @@ export default function Settings() {
 
       {/* Logs tab */}
       {tab === "logs" && (
+        loadingLogs ? (
+          <SkeletonBlock className="h-[240px] rounded-xl" />
+        ) : logsError ? (
+          <EmptyState icon={AlertCircle} title="Không thể tải nhật ký" description={logsError} compact />
+        ) : (
         <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-card">
           <div className="space-y-3">
             {activityLogs.map((log) => (
@@ -301,6 +376,7 @@ export default function Settings() {
             ))}
           </div>
         </div>
+        )
       )}
 
       {/* Notify tab */}
@@ -417,9 +493,11 @@ export default function Settings() {
               </button>
               <button
                 onClick={saveEdit}
-                className="flex-1 bg-brand-600 hover:bg-brand-500 rounded-lg py-2 text-sm text-white font-medium"
+                disabled={savingUser}
+                className="flex-1 bg-brand-600 hover:bg-brand-500 rounded-lg py-2 text-sm text-white font-medium disabled:opacity-60 inline-flex items-center justify-center gap-1.5"
               >
-                Lưu
+                {savingUser && <Loader2 size={14} className="animate-spin" />}
+                {savingUser ? "Đang lưu..." : "Lưu"}
               </button>
             </div>
           </div>
@@ -436,6 +514,7 @@ export default function Settings() {
         }
         onCancel={() => setDeleteTarget(null)}
         onConfirm={handleDeleteUser}
+        loading={deletingUser}
       />
     </div>
   );

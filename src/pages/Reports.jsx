@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -10,10 +11,18 @@ import {
   Line,
   Legend,
 } from "recharts";
-import { Download } from "lucide-react";
+import { Download, AlertCircle } from "lucide-react";
 import ChartCard from "../components/ui/ChartCard.jsx";
 import FunnelBody from "../components/dashboard/FunnelBody.jsx";
-import { leadsByDay, sources, classification, funnel } from "../data/mockData.js";
+import { SkeletonBlock } from "../components/ui/Skeleton.jsx";
+import EmptyState from "../components/ui/EmptyState.jsx";
+import {
+  fetchLeadsByDay,
+  fetchLeadsBySource,
+  fetchLeadsByStatusClassification,
+  fetchConversionFunnel,
+  fetchConversionTrend,
+} from "../services/dashboardService.js";
 import { exportToCsv } from "../utils/exportCsv.js";
 
 const tooltipStyle = {
@@ -25,15 +34,62 @@ const tooltipStyle = {
   boxShadow: "0 8px 24px rgba(15,23,42,0.14)",
 };
 
-const conversionTrend = [
-  { period: "T1", lead: 120, converted: 8 },
-  { period: "T2", lead: 150, converted: 12 },
-  { period: "T3", lead: 180, converted: 16 },
-  { period: "T4", lead: 210, converted: 20 },
-  { period: "T5", lead: 248, converted: 28 },
-];
-
 export default function Reports() {
+  const [leadsByDay, setLeadsByDay] = useState([]);
+  const [sources, setSources] = useState([]);
+  const [classification, setClassification] = useState([]);
+  const [funnel, setFunnel] = useState([]);
+  const [conversionTrend, setConversionTrend] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Tải toàn bộ dữ liệu báo cáo qua dashboardService — xem services/dashboardService.js
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetchLeadsByDay(),
+      fetchLeadsBySource(),
+      fetchLeadsByStatusClassification(),
+      fetchConversionFunnel(),
+      fetchConversionTrend(),
+    ])
+      .then(([byDay, src, cls, fn, trend]) => {
+        if (cancelled) return;
+        setLeadsByDay(byDay);
+        setSources(src);
+        setClassification(cls);
+        setFunnel(fn);
+        setConversionTrend(trend);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || "Không thể tải báo cáo.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const classificationTotal = classification.reduce((a, c) => a + c.value, 0) || 1;
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <SkeletonBlock className="h-10 w-64" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <SkeletonBlock className="h-[280px] rounded-xl" />
+          <SkeletonBlock className="h-[280px] rounded-xl" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return <EmptyState icon={AlertCircle} title="Không thể tải báo cáo" description={error} />;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -92,7 +148,7 @@ export default function Reports() {
                 <div className="flex-1 h-5 bg-slate-100 rounded-md overflow-hidden">
                   <div
                     className="h-full rounded-md"
-                    style={{ width: `${(c.value / 248) * 100}%`, background: c.color }}
+                    style={{ width: `${(c.value / classificationTotal) * 100}%`, background: c.color }}
                   />
                 </div>
                 <div className="w-8 text-xs text-slate-500 text-right">{c.value}</div>

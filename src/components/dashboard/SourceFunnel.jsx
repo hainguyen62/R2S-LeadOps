@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -9,7 +10,8 @@ import {
 } from "recharts";
 import ChartCard from "../ui/ChartCard.jsx";
 import FunnelBody from "./FunnelBody.jsx";
-import { sources, funnel } from "../../data/mockData.js";
+import { SkeletonBlock } from "../ui/Skeleton.jsx";
+import { fetchLeadsBySource, fetchConversionFunnel } from "../../services/dashboardService.js";
 
 const tooltipStyle = {
   background: "#ffffff",
@@ -21,7 +23,7 @@ const tooltipStyle = {
   padding: "8px 12px",
 };
 
-function ConversionFunnelCard() {
+function ConversionFunnelCard({ funnel }) {
   return (
     <div className="funnel-card">
       <div className="funnel-card__head">
@@ -37,6 +39,40 @@ function ConversionFunnelCard() {
 }
 
 export default function SourceFunnel() {
+  const [sources, setSources] = useState([]);
+  const [funnel, setFunnel] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // GET /api/dashboard/leads-by-source + conversion-funnel — xem dashboardService.js
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([fetchLeadsBySource(), fetchConversionFunnel()])
+      .then(([src, fn]) => {
+        if (cancelled) return;
+        setSources(src);
+        setFunnel(fn);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <>
+        <ChartCard title="Nguồn lead">
+          <SkeletonBlock className="w-full h-[240px]" />
+        </ChartCard>
+        <div className="funnel-card">
+          <SkeletonBlock className="w-full h-[240px]" />
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <ChartCard title="Nguồn lead">
@@ -65,7 +101,7 @@ export default function SourceFunnel() {
         </ResponsiveContainer>
       </ChartCard>
 
-      <ConversionFunnelCard />
+      <ConversionFunnelCard funnel={funnel} />
     </>
   );
 }

@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { useState } from "react";
 import Layout from "./components/layout/Layout.jsx";
 import { ToastProvider } from "./components/ui/ToastProvider.jsx";
+import { logout as logoutApi } from "./services/authService.js";
 import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
@@ -18,8 +19,12 @@ import Profile from "./pages/Profile.jsx";
 export default function App() {
   const [user, setUser] = useState(null);
 
-  // Mock login: no real auth — just UI demo
-  const handleLogin = (name) => setUser({ name });
+  // Đăng nhập thật qua authService (mock cho tới khi có Back-end — xem services/authService.js)
+  const handleLogin = (loggedInUser) => setUser(loggedInUser);
+
+  const handleLogout = () => {
+    logoutApi().finally(() => setUser(null));
+  };
 
   if (!user) {
     return (
@@ -36,7 +41,7 @@ export default function App() {
 
   return (
     <ToastProvider>
-      <Layout user={user} onLogout={() => setUser(null)}>
+      <Layout user={user} onLogout={handleLogout}>
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/leads" element={<Leads />} />

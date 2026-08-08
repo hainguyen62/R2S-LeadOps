@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -9,6 +9,8 @@ import {
   GraduationCap,
   TrendingUp,
   Check,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 import {
   AreaChart,
@@ -19,7 +21,9 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { campaigns, campaignTrends } from "../data/mockData.js";
+import { fetchCampaignById, fetchCampaignTrend, updateCampaign } from "../services/campaignService.js";
+import { SkeletonBlock } from "../components/ui/Skeleton.jsx";
+import EmptyState from "../components/ui/EmptyState.jsx";
 
 const tooltipStyle = {
   background: "#ffffff",
@@ -34,33 +38,82 @@ const tooltipStyle = {
 export default function CampaignDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const campaign = campaigns.find((c) => String(c.id) === id);
-
-  const [form, setForm] = useState(() =>
-    campaign
-      ? {
-          name: campaign.name,
-          course: campaign.course || "",
-          source: campaign.source || "",
-          status: campaign.status || "Đang chạy",
-          budget: campaign.budget || "",
-          start: campaign.start || "",
-          end: campaign.end || "",
-          utmSource: campaign.utmSource || "",
-          utmMedium: campaign.utmMedium || "",
-          utmCampaign: campaign.utmCampaign || "",
-          utmContent: campaign.utmContent || "",
-          utmTerm: campaign.utmTerm || "",
-        }
-      : null
-  );
+  const [campaign, setCampaign] = useState(null);
+  const [trend, setTrend] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [form, setForm] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState("");
 
-  const trend = campaignTrends[campaign?.id] || [];
+  // GET /api/campaigns/{id} + xu hướng lead — xem services/campaignService.js
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    Promise.all([fetchCampaignById(id), fetchCampaignTrend(id)])
+      .then(([c, t]) => {
+        if (cancelled) return;
+        setCampaign(c);
+        setTrend(t);
+        setForm({
+          name: c.name,
+          course: c.course || "",
+          source: c.source || "",
+          status: c.status || "Đang chạy",
+          budget: c.budget || "",
+          start: c.start || "",
+          end: c.end || "",
+          utmSource: c.utmSource || "",
+          utmMedium: c.utmMedium || "",
+          utmCampaign: c.utmCampaign || "",
+          utmContent: c.utmContent || "",
+          utmTerm: c.utmTerm || "",
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || "Không thể tải chiến dịch.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
   const conversionRate = useMemo(() => {
     if (!campaign || !campaign.leads) return "0%";
     return `${Math.round((campaign.registrations / campaign.leads) * 100)}%`;
   }, [campaign]);
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <button
+          onClick={() => navigate("/campaigns")}
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
+        >
+          <ArrowLeft size={16} /> Quay lại danh sách chiến dịch
+        </button>
+        <SkeletonBlock className="h-[400px] rounded-xl" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <button
+          onClick={() => navigate("/campaigns")}
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
+        >
+          <ArrowLeft size={16} /> Quay lại danh sách chiến dịch
+        </button>
+        <EmptyState icon={AlertCircle} title="Không thể tải chiến dịch" description={error} compact />
+      </div>
+    );
+  }
 
   if (!campaign || !form) {
     return (
@@ -78,11 +131,20 @@ export default function CampaignDetails() {
     );
   }
 
-  const handleSave = (e) => {
+  // PUT /api/campaigns/{id} — xem services/campaignService.js
+  const handleSave = async (e) => {
     e.preventDefault();
-    Object.assign(campaign, form);
-    setSavedMsg("Đã lưu thay đổi chiến dịch.");
-    setTimeout(() => setSavedMsg(""), 2500);
+    setSaving(true);
+    try {
+      const updated = await updateCampaign(campaign.id, form);
+      setCampaign(updated);
+      setSavedMsg("Đã lưu thay đổi chiến dịch.");
+      setTimeout(() => setSavedMsg(""), 2500);
+    } catch (err) {
+      setSavedMsg("");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const statCards = [
@@ -249,8 +311,9 @@ export default function CampaignDetails() {
           </div>
 
           <div className="pt-2">
-            <button type="submit" className="w-full bg-brand-600 hover:bg-brand-500 rounded-lg py-2 text-sm text-white">
-              Lưu thay đổi
+            <button type="submit" disabled={saving} className="w-full bg-brand-600 hover:bg-brand-500 rounded-lg py-2 text-sm text-white disabled:opacity-60 inline-flex items-center justify-center gap-1.5">
+              {saving && <Loader2 size={14} className="animate-spin" />}
+              {saving ? "Đang lưu..." : "Lưu thay đổi"}
             </button>
           </div>
         </form>

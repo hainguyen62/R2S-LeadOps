@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Mail, Lock, LogIn, Eye, EyeOff, Zap, ShieldCheck } from "lucide-react";
+import { Mail, Lock, LogIn, Loader2, Eye, EyeOff, Zap, ShieldCheck } from "lucide-react";
 import Avatar from "../components/ui/Avatar.jsx";
 import PublicHeader from "../components/layout/PublicHeader.jsx";
+import { login } from "../services/authService.js";
+import { validateLoginForm, hasErrors } from "../utils/validators.js";
 
 // Tài khoản test mặc định
 const testAccounts = [
@@ -16,25 +18,39 @@ export default function Login({ onLogin }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const doLogin = async (loginEmail, loginPassword) => {
+    setError("");
+    const errors = validateLoginForm({ email: loginEmail, password: loginPassword });
+    if (hasErrors(errors)) {
+      setFieldErrors(errors);
+      return;
+    }
+    setFieldErrors({});
+    setSubmitting(true);
+    try {
+      const user = await login({ email: loginEmail, password: loginPassword });
+      onLogin(user);
+    } catch (err) {
+      setError(err.message || "Đăng nhập thất bại. Vui lòng thử lại.");
+      if (err.fieldErrors) setFieldErrors(err.fieldErrors);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!email || !password) {
-      setError("Vui lòng nhập email và mật khẩu.");
-      return;
-    }
-    // Demo login: chấp nhận mọi giá trị hợp lệ
-    const acc = testAccounts.find((a) => a.email === email);
-    const name = acc ? acc.name : email.split("@")[0] || "Tư vấn viên A";
-    onLogin(name);
+    doLogin(email, password);
   };
 
   const quickLogin = (acc) => {
     setEmail(acc.email);
     setPassword("123456");
-    setError("");
-    onLogin(acc.name);
+    doLogin(acc.email, "123456");
   };
 
   const inputBase =
@@ -65,15 +81,18 @@ export default function Login({ onLogin }) {
             <p className="mt-1 text-sm text-slate-500">Truy cập vào hệ thống R2S LeadOps.</p>
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-              <div className="relative">
-                <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Email / Số điện thoại"
-                  className={inputBase}
-                />
+              <div>
+                <div className="relative">
+                  <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Email"
+                    className={`${inputBase} ${fieldErrors.email ? "ring-1 ring-red-400" : ""}`}
+                  />
+                </div>
+                {fieldErrors.email && <p className="mt-1 text-xs text-red-600">{fieldErrors.email}</p>}
               </div>
 
               <div>
@@ -84,7 +103,7 @@ export default function Login({ onLogin }) {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Mật khẩu"
-                    className={`${inputBase} pr-10`}
+                    className={`${inputBase} pr-10 ${fieldErrors.password ? "ring-1 ring-red-400" : ""}`}
                   />
                   <button
                     type="button"
@@ -95,6 +114,7 @@ export default function Login({ onLogin }) {
                     {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
+                {fieldErrors.password && <p className="mt-1 text-xs text-red-600">{fieldErrors.password}</p>}
                 <div className="mt-2 text-right">
                   <a
                     href="#forgot"
@@ -113,10 +133,11 @@ export default function Login({ onLogin }) {
 
               <button
                 type="submit"
-                className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-brand-700 py-2.5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-brand-600 active:bg-brand-800"
+                disabled={submitting}
+                className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-brand-700 py-2.5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-brand-600 active:bg-brand-800 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <LogIn size={16} />
-                Đăng nhập
+                {submitting ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
+                {submitting ? "Đang đăng nhập..." : "Đăng nhập"}
               </button>
             </form>
 

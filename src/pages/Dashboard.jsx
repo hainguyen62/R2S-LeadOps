@@ -1,29 +1,71 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { stats, leads } from "../data/mockData.js";
 import StatCard from "../components/ui/StatCard.jsx";
 import { DashboardSkeleton } from "../components/ui/Skeleton.jsx";
+import EmptyState from "../components/ui/EmptyState.jsx";
 import LeadCharts from "../components/dashboard/LeadCharts.jsx";
 import SourceFunnel from "../components/dashboard/SourceFunnel.jsx";
 import HotLeadsPanel from "../components/dashboard/HotLeadsPanel.jsx";
 import LeadDetailModal from "../components/dashboard/LeadDetailModal.jsx";
+import { fetchDashboardOverview } from "../services/dashboardService.js";
+import { fetchLeadById } from "../services/leadService.js";
+import { AlertCircle } from "lucide-react";
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState(null);
+  const [selectedLead, setSelectedLead] = useState(null);
+  const [stats, setStats] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
+  // GET /api/dashboard/overview — tải KPI tổng quan qua dashboardService
   useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 600);
-    return () => clearTimeout(t);
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetchDashboardOverview()
+      .then((data) => {
+        if (!cancelled) setStats(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || "Không thể tải dữ liệu Dashboard.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const selected = useMemo(
-    () => leads.find((l) => l.id === selectedId) || null,
-    [selectedId]
-  );
+  // Khi chọn 1 hot lead, tải chi tiết lead qua leadService để hiện modal
+  useEffect(() => {
+    if (!selectedId) {
+      setSelectedLead(null);
+      return;
+    }
+    let cancelled = false;
+    fetchLeadById(selectedId).then((l) => {
+      if (!cancelled) setSelectedLead(l);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
 
   if (loading) return <DashboardSkeleton />;
+
+  if (error) {
+    return (
+      <EmptyState
+        icon={AlertCircle}
+        title="Không thể tải Dashboard"
+        description={error}
+        action={{ label: "Thử lại", onClick: () => window.location.reload() }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -50,7 +92,7 @@ export default function Dashboard() {
       </div>
 
       {/* Click 1 lead -> popup chi tiết (không chiếm không gian cố định) */}
-      <LeadDetailModal lead={selected} onClose={() => setSelectedId(null)} />
+      <LeadDetailModal lead={selectedLead} onClose={() => setSelectedId(null)} />
     </div>
   );
 }

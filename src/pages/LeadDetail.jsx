@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Flame, Droplet, UserCheck, ChevronDown, Check } from "lucide-react";
+import { ArrowLeft, Flame, Droplet, UserCheck, ChevronDown, Check, AlertCircle } from "lucide-react";
 import Pill from "../components/ui/Pill.jsx";
 import Avatar from "../components/ui/Avatar.jsx";
 import ContactButtons from "../components/ui/ContactButtons.jsx";
 import { LeadDetailSkeleton } from "../components/ui/Skeleton.jsx";
+import EmptyState from "../components/ui/EmptyState.jsx";
 import { useToast } from "../components/ui/ToastProvider.jsx";
-import { leads, statusStyle, classStyle, careHistory, leadStatusOrder } from "../data/mockData.js";
+import { statusStyle, classStyle, leadStatusOrder } from "../data/mockData.js";
+import { fetchLeadById, fetchLeadActivities, updateLeadStatus } from "../services/leadService.js";
 import { priorityTier, getScoreBreakdown } from "../utils/leadScoring.js";
 
 // Cùng bộ 3 cấp độ ưu tiên với popup Chi tiết lead ở Dashboard, để icon
@@ -21,15 +23,33 @@ export default function LeadDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
-  const lead = leads.find((l) => String(l.id) === id);
+  const [lead, setLead] = useState(null);
+  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [statusOpen, setStatusOpen] = useState(false);
-  const [, forceRefresh] = useState(0);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
+  // GET /api/leads/{id} + GET /api/leads/{id}/activities — xem leadService.js
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
-    const t = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(t);
+    setError(null);
+    Promise.all([fetchLeadById(id), fetchLeadActivities(id)])
+      .then(([l, h]) => {
+        if (cancelled) return;
+        setLead(l);
+        setHistory(h);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || "Không thể tải thông tin lead.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   if (loading) {
@@ -42,6 +62,20 @@ export default function LeadDetail() {
           <ArrowLeft size={16} /> Quay lại danh sách lead
         </button>
         <LeadDetailSkeleton />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <button
+          onClick={() => navigate("/leads")}
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
+        >
+          <ArrowLeft size={16} /> Quay lại danh sách lead
+        </button>
+        <EmptyState icon={AlertCircle} title="Không thể tải lead" description={error} compact />
       </div>
     );
   }
@@ -62,23 +96,24 @@ export default function LeadDetail() {
     );
   }
 
-  const handleChangeStatus = (newStatus) => {
+  // PATCH /api/leads/{id}/status — xem leadService.js
+  const handleChangeStatus = async (newStatus) => {
     setStatusOpen(false);
     if (newStatus === lead.status) return;
-    lead.status = newStatus;
-    careHistory[lead.id] = [
-      ...(careHistory[lead.id] || []),
-      {
-        text: `Chuyển trạng thái sang ${newStatus}`,
-        channel: "Tư vấn viên A",
-        date: new Date().toLocaleString("vi-VN"),
-      },
-    ];
-    toast.success("Cập nhật trạng thái thành công.");
-    forceRefresh((n) => n + 1);
+    setUpdatingStatus(true);
+    try {
+      const updated = await updateLeadStatus(lead.id, { newStatus });
+      setLead(updated);
+      const freshHistory = await fetchLeadActivities(lead.id);
+      setHistory(freshHistory);
+      toast.success("Cập nhật trạng thái thành công.");
+    } catch (err) {
+      toast.error(err.message || "Cập nhật trạng thái thất bại.");
+    } finally {
+      setUpdatingStatus(false);
+    }
   };
 
-  const history = careHistory[lead.id] || [];
   const breakdown = getScoreBreakdown(lead);
   const tier = priorityTier(lead.score);
   const style = priorityStyles[tier];
@@ -182,9 +217,10 @@ export default function LeadDetail() {
             <div className="relative">
               <button
                 onClick={() => setStatusOpen((v) => !v)}
-                className="w-full flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-500 rounded-lg py-2.5 text-sm text-white font-medium"
+                disabled={updatingStatus}
+                className="w-full flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-500 rounded-lg py-2.5 text-sm text-white font-medium disabled:opacity-60"
               >
-                Cập nhật trạng thái <ChevronDown size={15} className={statusOpen ? "rotate-180 transition-transform" : "transition-transform"} />
+                {updatingStatus ? "Đang cập nhật..." : "Cập nhật trạng thái"} <ChevronDown size={15} className={statusOpen ? "rotate-180 transition-transform" : "transition-transform"} />
               </button>
               {statusOpen && (
                 <>

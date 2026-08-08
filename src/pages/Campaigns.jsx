@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, GitBranch, X, ChevronRight, Trash2 } from "lucide-react";
-import { campaigns } from "../data/mockData.js";
+import { Plus, GitBranch, X, ChevronRight, Trash2, AlertCircle, Loader2 } from "lucide-react";
+import { fetchCampaigns, createCampaign, deleteCampaign } from "../services/campaignService.js";
+import { SkeletonBlock } from "../components/ui/Skeleton.jsx";
 import ConfirmDialog from "../components/ui/ConfirmDialog.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 import { useToast } from "../components/ui/ToastProvider.jsx";
@@ -18,51 +19,78 @@ const formatShortDate = (iso) => {
 export default function Campaigns() {
   const navigate = useNavigate();
   const toast = useToast();
+  const [campaigns, setCampaigns] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ name: "", source: "", budget: "", start: "", end: "" });
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [, forceRefresh] = useState(0);
+  const [deleting, setDeleting] = useState(false);
+  const [refreshTick, forceRefresh] = useState(0);
 
-  const handleAdd = (e) => {
+  // GET /api/campaigns — xem services/campaignService.js
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetchCampaigns()
+      .then((data) => {
+        if (!cancelled) setCampaigns(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || "Không thể tải danh sách chiến dịch.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshTick]);
+
+  const handleAdd = async (e) => {
     e.preventDefault();
-    if (!form.name) return;
-    campaigns.push({
-      id: Date.now(),
-      name: form.name,
-      source: form.source || "Manual",
-      course: "",
-      leads: 0,
-      hotLeads: 0,
-      deposits: 0,
-      registrations: 0,
-      status: "Đang chạy",
-      budget: form.budget || "0",
-      start: form.start || "—",
-      end: form.end || "—",
-      utmSource: "",
-      utmMedium: "",
-      utmCampaign: "",
-      utmContent: "",
-      utmTerm: "",
-    });
-    setShowAdd(false);
-    setForm({ name: "", source: "", budget: "", start: "", end: "" });
-    toast.success("Tạo chiến dịch thành công.");
-    forceRefresh((n) => n + 1);
+    if (!form.name.trim()) return;
+    setSubmitting(true);
+    try {
+      await createCampaign({
+        name: form.name,
+        source: form.source || "Manual",
+        course: "",
+        budget: form.budget || "0",
+        start: form.start || "—",
+        end: form.end || "—",
+        utmSource: "",
+        utmMedium: "",
+        utmCampaign: "",
+        utmContent: "",
+        utmTerm: "",
+      });
+      setShowAdd(false);
+      setForm({ name: "", source: "", budget: "", start: "", end: "" });
+      toast.success("Tạo chiến dịch thành công.");
+      forceRefresh((n) => n + 1);
+    } catch (err) {
+      toast.error(err.message || "Tạo chiến dịch thất bại.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDeleteCampaign = () => {
+  const handleDeleteCampaign = async () => {
     if (!deleteTarget) return;
-    const idx = campaigns.findIndex((c) => c.id === deleteTarget.id);
-    if (idx === -1) {
-      toast.error("Xóa thất bại: không tìm thấy chiến dịch.");
+    setDeleting(true);
+    try {
+      await deleteCampaign(deleteTarget.id);
+      toast.success(`Đã xóa chiến dịch "${deleteTarget.name}" thành công.`);
       setDeleteTarget(null);
-      return;
+      forceRefresh((n) => n + 1);
+    } catch (err) {
+      toast.error(err.message || "Xóa thất bại.");
+    } finally {
+      setDeleting(false);
     }
-    campaigns.splice(idx, 1);
-    toast.success(`Đã xóa chiến dịch "${deleteTarget.name}" thành công.`);
-    setDeleteTarget(null);
-    forceRefresh((n) => n + 1);
   };
 
   return (
@@ -80,7 +108,20 @@ export default function Campaigns() {
         </button>
       </div>
 
-      {campaigns.length === 0 ? (
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <SkeletonBlock key={i} className="h-[180px] rounded-xl" />
+          ))}
+        </div>
+      ) : error ? (
+        <EmptyState
+          icon={AlertCircle}
+          title="Không thể tải chiến dịch"
+          description={error}
+          action={{ label: "Thử lại", onClick: () => forceRefresh((n) => n + 1) }}
+        />
+      ) : campaigns.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl shadow-card">
           <EmptyState
             icon={GitBranch}
@@ -152,6 +193,7 @@ export default function Campaigns() {
         message={deleteTarget ? `Bạn có chắc chắn muốn xóa chiến dịch "${deleteTarget.name}"? Số liệu lead/ngân sách liên quan sẽ không còn được theo dõi.` : ""}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={handleDeleteCampaign}
+        loading={deleting}
       />
 
       {showAdd && (
@@ -216,8 +258,9 @@ export default function Campaigns() {
                 >
                   Hủy
                 </button>
-                <button type="submit" className="flex-1 bg-brand-600 hover:bg-brand-500 rounded-lg py-2 text-sm text-white">
-                  Tạo chiến dịch
+                <button type="submit" disabled={submitting} className="flex-1 bg-brand-600 hover:bg-brand-500 rounded-lg py-2 text-sm text-white disabled:opacity-60 inline-flex items-center justify-center gap-1.5">
+                  {submitting && <Loader2 size={14} className="animate-spin" />}
+                  {submitting ? "Đang lưu..." : "Tạo chiến dịch"}
                 </button>
               </div>
             </form>

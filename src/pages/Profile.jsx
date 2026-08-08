@@ -1,8 +1,11 @@
-import { useState } from "react";
-import { User, KeyRound, Check } from "lucide-react";
+import { useEffect, useState } from "react";
+import { User, KeyRound, Check, AlertCircle } from "lucide-react";
 import Avatar from "../components/ui/Avatar.jsx";
 import Pill from "../components/ui/Pill.jsx";
-import { currentUserProfile } from "../data/mockData.js";
+import { SkeletonBlock } from "../components/ui/Skeleton.jsx";
+import EmptyState from "../components/ui/EmptyState.jsx";
+import { fetchProfile, updateProfile } from "../services/settingsService.js";
+import { changePassword } from "../services/authService.js";
 
 const roleStyle = {
   Admin: "bg-red-50 text-red-800",
@@ -12,30 +15,65 @@ const roleStyle = {
 
 export default function Profile() {
   const [tab, setTab] = useState("info");
-  const [form, setForm] = useState({
-    name: currentUserProfile.name,
-    email: currentUserProfile.email,
-    phone: currentUserProfile.phone,
-    department: currentUserProfile.department,
-  });
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [form, setForm] = useState(null);
+  const [savingInfo, setSavingInfo] = useState(false);
   const [pwForm, setPwForm] = useState({ current: "", next: "", confirm: "" });
+  const [savingPw, setSavingPw] = useState(false);
   const [savedMsg, setSavedMsg] = useState("");
   const [pwError, setPwError] = useState("");
 
-  const initials = currentUserProfile.name
+  // GET /api/auth/me (hồ sơ chi tiết) — xem services/settingsService.js
+  useEffect(() => {
+    let cancelled = false;
+    fetchProfile()
+      .then((data) => {
+        if (cancelled) return;
+        setProfile(data);
+        setForm({ name: data.name, email: data.email, phone: data.phone, department: data.department });
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || "Không thể tải hồ sơ.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (loading) return <SkeletonBlock className="h-[400px] rounded-xl" />;
+  if (error) return <EmptyState icon={AlertCircle} title="Không thể tải hồ sơ" description={error} />;
+  if (!profile || !form) return null;
+
+  const initials = profile.name
     .split(" ")
     .slice(-2)
     .map((w) => w[0])
     .join("")
     .toUpperCase();
 
-  const handleSaveInfo = (e) => {
+  // PUT /api/users/me — xem services/settingsService.js
+  const handleSaveInfo = async (e) => {
     e.preventDefault();
-    setSavedMsg("Đã lưu thông tin cá nhân.");
-    setTimeout(() => setSavedMsg(""), 2500);
+    setSavingInfo(true);
+    try {
+      const updated = await updateProfile(form);
+      setProfile(updated);
+      setSavedMsg("Đã lưu thông tin cá nhân.");
+      setTimeout(() => setSavedMsg(""), 2500);
+    } catch (err) {
+      setPwError("");
+    } finally {
+      setSavingInfo(false);
+    }
   };
 
-  const handleChangePassword = (e) => {
+  // PUT /api/auth/change-password — xem services/authService.js
+  const handleChangePassword = async (e) => {
     e.preventDefault();
     setPwError("");
     if (!pwForm.current || !pwForm.next || !pwForm.confirm) {
@@ -50,9 +88,17 @@ export default function Profile() {
       setPwError("Xác nhận mật khẩu không khớp.");
       return;
     }
-    setSavedMsg("Đã đổi mật khẩu thành công.");
-    setPwForm({ current: "", next: "", confirm: "" });
-    setTimeout(() => setSavedMsg(""), 2500);
+    setSavingPw(true);
+    try {
+      await changePassword({ oldPassword: pwForm.current, newPassword: pwForm.next });
+      setSavedMsg("Đã đổi mật khẩu thành công.");
+      setPwForm({ current: "", next: "", confirm: "" });
+      setTimeout(() => setSavedMsg(""), 2500);
+    } catch (err) {
+      setPwError(err.message || "Đổi mật khẩu thất bại.");
+    } finally {
+      setSavingPw(false);
+    }
   };
 
   return (
@@ -64,11 +110,11 @@ export default function Profile() {
 
       {/* Header card */}
       <div className="bg-white border border-slate-300 rounded-card p-6 shadow-card flex items-center gap-4 transition-all duration-200 ease-out hover:shadow-elevated">
-        <Avatar name={currentUserProfile.name} initials={initials} size={56} />
+        <Avatar name={profile.name} initials={initials} size={56} />
         <div>
-          <p className="font-semibold text-slate-900">{currentUserProfile.name}</p>
-          <p className="text-xs text-slate-500 mb-1.5">{currentUserProfile.department}</p>
-          <Pill text={currentUserProfile.role} map={roleStyle} />
+          <p className="font-semibold text-slate-900">{profile.name}</p>
+          <p className="text-xs text-slate-500 mb-1.5">{profile.department}</p>
+          <Pill text={profile.role} map={roleStyle} />
         </div>
       </div>
 
@@ -138,14 +184,14 @@ export default function Profile() {
             <label className="text-xs text-slate-500 block mb-1">Vai trò</label>
             <input
               disabled
-              value={currentUserProfile.role}
+              value={profile.role}
               title="Vai trò chỉ có thể thay đổi bởi Quản trị viên"
               className="w-full bg-slate-100 border border-slate-200 rounded-input px-3 py-2 text-sm text-slate-400 cursor-not-allowed"
             />
           </div>
           <div className="pt-2">
-            <button type="submit" className="bg-brand-600 hover:bg-brand-500 rounded-card px-5 py-2 text-sm text-white shadow-sm hover:shadow-md transition-all duration-200 ease-out">
-              Lưu thay đổi
+            <button type="submit" disabled={savingInfo} className="bg-brand-600 hover:bg-brand-500 rounded-card px-5 py-2 text-sm text-white shadow-sm hover:shadow-md transition-all duration-200 ease-out disabled:opacity-60">
+              {savingInfo ? "Đang lưu..." : "Lưu thay đổi"}
             </button>
           </div>
         </form>
@@ -189,8 +235,8 @@ export default function Profile() {
             />
           </div>
           <div className="pt-2">
-            <button type="submit" className="bg-brand-600 hover:bg-brand-500 rounded-card px-5 py-2 text-sm text-white shadow-sm hover:shadow-md transition-all duration-200 ease-out">
-              Đổi mật khẩu
+            <button type="submit" disabled={savingPw} className="bg-brand-600 hover:bg-brand-500 rounded-card px-5 py-2 text-sm text-white shadow-sm hover:shadow-md transition-all duration-200 ease-out disabled:opacity-60">
+              {savingPw ? "Đang xử lý..." : "Đổi mật khẩu"}
             </button>
           </div>
         </form>
