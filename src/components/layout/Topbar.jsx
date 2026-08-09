@@ -1,16 +1,26 @@
-import { Search, LogOut } from "lucide-react";
+import { Search, LogOut, Menu, PanelLeftClose } from "lucide-react";
 import { Link } from "react-router-dom";
 import Avatar from "../ui/Avatar.jsx";
 import NotificationBell from "./NotificationBell.jsx";
 
-export default function Topbar({ user, onLogout }) {
+export default function Topbar({ user, onLogout, sidebarOpen, onToggleSidebar }) {
   const initials = user?.name
     ? user.name.split(" ").slice(-2).map((w) => w[0]).join("").toUpperCase()
     : "TA";
 
   return (
-    <div className="h-16 flex items-center justify-between px-6 border-b border-slate-200 bg-white/80 backdrop-blur">
-      <h1 className="text-lg font-semibold text-slate-900">R2S LeadOps</h1>
+    <div className="h-16 flex items-center justify-between px-4 md:px-6 border-b border-slate-200 bg-white/80 backdrop-blur">
+      <div className="flex items-center gap-3 min-w-0">
+        {/* Nút mở/đóng sidebar — hiện ở mọi kích thước màn hình */}
+        <button
+          onClick={onToggleSidebar}
+          className="text-slate-500 hover:text-slate-800 shrink-0"
+          aria-label={sidebarOpen ? "Đóng menu" : "Mở menu"}
+        >
+          {sidebarOpen ? <PanelLeftClose size={22} /> : <Menu size={22} />}
+        </button>
+        <h1 className="text-lg font-semibold text-slate-900 truncate">R2S LeadOps</h1>
+      </div>
       <div className="flex items-center gap-4">
         <div className="relative hidden md:block">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
