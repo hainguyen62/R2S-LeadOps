@@ -62,7 +62,6 @@ export default function Sidebar({ open = false, onClose }) {
               <NavLink
                 key={item.label}
                 to={item.path}
-                onClick={onClose}
                 className={({ isActive }) =>
                   `w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200 ease-out ${
                     isActive
