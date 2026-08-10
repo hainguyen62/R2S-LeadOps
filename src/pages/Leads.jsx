@@ -310,11 +310,11 @@ export default function Leads() {
             className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-brand-500 focus:bg-white"
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value); resetPage(); }}
-            className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="flex-1 min-w-[130px] bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500"
           >
             {statuses.map((s) => (
               <option key={s} value={s}>{s}</option>
@@ -323,13 +323,13 @@ export default function Leads() {
           <select
             value={classFilter}
             onChange={(e) => { setClassFilter(e.target.value); resetPage(); }}
-            className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="flex-1 min-w-[130px] bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500"
           >
             {classes.map((c) => (
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
-          <button className="flex items-center gap-1.5 text-xs border border-slate-300 rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50">
+          <button className="flex items-center justify-center gap-1.5 text-xs border border-slate-300 rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50 shrink-0 whitespace-nowrap">
             <ListFilter size={14} /> Bộ lọc
           </button>
         </div>
