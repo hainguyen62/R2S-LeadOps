@@ -197,7 +197,13 @@ export default function LeadDetail() {
                 {breakdown.map((b, i) => (
                   <div key={i} className="flex justify-between text-xs gap-3">
                     <span className="text-slate-500">{b.label}</span>
-                    <span className="text-emerald-600 font-medium shrink-0">{b.value}</span>
+                    <span
+                      className={`font-medium shrink-0 ${
+                        b.group === "E" || b.value.trim().startsWith("-") ? "text-red-600" : "text-emerald-600"
+                      }`}
+                    >
+                      {b.value}
+                    </span>
                   </div>
                 ))}
               </div>
