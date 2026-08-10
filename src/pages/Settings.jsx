@@ -9,9 +9,10 @@ import { useToast } from "../components/ui/ToastProvider.jsx";
 import { fetchUsers, updateUser, deleteUser, fetchActivityLogs } from "../services/settingsService.js";
 
 const roleStyle = {
-  Admin: "bg-red-50 text-red-700",
-  Marketing: "bg-violet-50 text-violet-700",
-  Sales: "bg-blue-50 text-blue-700",
+  Administrator: "bg-red-50 text-red-700",
+  "Leader Marketing": "bg-violet-50 text-violet-700",
+  "Sales/Admissions": "bg-blue-50 text-blue-700",
+  "Marketing Staff": "bg-amber-50 text-amber-700",
 };
 
 const tabs = [
@@ -279,7 +280,7 @@ export default function Settings() {
                         </button>
                         <button
                           onClick={() => setDeleteTarget(u)}
-                          title={u.role === "Admin" ? "Không thể xóa tài khoản Admin" : "Xóa"}
+                          title={u.role === "Administrator" ? "Không thể xóa tài khoản Admin" : "Xóa"}
                           className="p-1.5 rounded-md transition-colors text-slate-500 hover:bg-red-50 hover:text-red-600"
                         >
                           <Trash2 size={16} />
@@ -478,9 +479,10 @@ export default function Settings() {
                   onChange={(e) => setForm({ ...form, role: e.target.value })}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                 >
-                  <option value="Admin">Admin</option>
-                  <option value="Marketing">Marketing</option>
-                  <option value="Sales">Sales</option>
+                  <option value="Administrator">Administrator</option>
+                  <option value="Leader Marketing">Leader Marketing</option>
+                  <option value="Sales/Admissions">Sales/Admissions</option>
+                  <option value="Marketing Staff">Marketing Staff</option>
                 </select>
               </div>
             </div>

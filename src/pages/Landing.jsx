@@ -172,8 +172,14 @@ export default function Landing() {
               </a>
             ))}
 <Link
-              to="/register"
+              to="/consultation"
               className={`inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-brand-200 bg-white px-4 py-2 text-sm font-semibold text-brand-700 transition-colors duration-200 hover:bg-brand-50 ${focusRing}`}
+            >
+              Đăng ký nhận tư vấn
+            </Link>
+            <Link
+              to="/register"
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition-colors duration-200 hover:bg-slate-50 ${focusRing}`}
             >
               Đăng ký
             </Link>
@@ -211,9 +217,16 @@ export default function Landing() {
                 </a>
               ))}
 <Link
-                to="/register"
+                to="/consultation"
                 onClick={() => setMenuOpen(false)}
                 className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-brand-200 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700"
+              >
+                Đăng ký nhận tư vấn
+              </Link>
+              <Link
+                to="/register"
+                onClick={() => setMenuOpen(false)}
+                className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
               >
                 Đăng ký
               </Link>

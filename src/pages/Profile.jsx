@@ -8,9 +8,10 @@ import { fetchProfile, updateProfile } from "../services/settingsService.js";
 import { changePassword } from "../services/authService.js";
 
 const roleStyle = {
-  Admin: "bg-red-50 text-red-800",
-  Marketing: "bg-violet-50 text-violet-800",
-  Sales: "bg-blue-50 text-blue-800",
+  Administrator: "bg-red-50 text-red-800",
+  "Leader Marketing": "bg-violet-50 text-violet-800",
+  "Sales/Admissions": "bg-blue-50 text-blue-800",
+  "Marketing Staff": "bg-amber-50 text-amber-800",
 };
 
 export default function Profile() {

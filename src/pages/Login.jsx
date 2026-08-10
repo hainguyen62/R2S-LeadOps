@@ -1,17 +1,18 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Mail, Lock, LogIn, Loader2, Eye, EyeOff, Zap, ShieldCheck } from "lucide-react";
+import { Mail, Lock, LogIn, Loader2, Eye, EyeOff, Zap, ShieldCheck, UserPlus } from "lucide-react";
 import Avatar from "../components/ui/Avatar.jsx";
 import PublicHeader from "../components/layout/PublicHeader.jsx";
 import { login } from "../services/authService.js";
 import { validateLoginForm, hasErrors } from "../utils/validators.js";
+import { useToast } from "../components/ui/ToastProvider.jsx";
 
 // Tài khoản test mặc định
 const testAccounts = [
-  { name: "Admin", email: "admin@r2s.edu.vn", role: "Admin" },
-  { name: "Leader Marketing", email: "marketing@r2s.edu.vn", role: "Marketing" },
-  { name: "Tư vấn viên A", email: "tva@r2s.edu.vn", role: "Sales" },
-  { name: "Tư vấn viên B", email: "tvb@r2s.edu.vn", role: "Sales" },
+  { name: "Admin", email: "admin@r2s.edu.vn", role: "Administrator" },
+  { name: "Leader Marketing", email: "marketing@r2s.edu.vn", role: "Leader Marketing" },
+  { name: "Tư vấn viên A", email: "tva@r2s.edu.vn", role: "Sales/Admissions" },
+  { name: "Tư vấn viên B", email: "tvb@r2s.edu.vn", role: "Sales/Admissions" },
 ];
 
 export default function Login({ onLogin }) {
@@ -21,6 +22,7 @@ export default function Login({ onLogin }) {
   const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const toast = useToast();
 
   const doLogin = async (loginEmail, loginPassword) => {
     setError("");
@@ -33,6 +35,7 @@ export default function Login({ onLogin }) {
     setSubmitting(true);
     try {
       const user = await login({ email: loginEmail, password: loginPassword });
+      toast.success(`Đăng nhập thành công! Chào mừng ${user?.name || "bạn"} quay trở lại.`);
       onLogin(user);
     } catch (err) {
       setError(err.message || "Đăng nhập thất bại. Vui lòng thử lại.");
@@ -202,12 +205,16 @@ export default function Login({ onLogin }) {
               Thông tin của bạn được bảo mật.
             </p>
 
-            <p className="mt-4 border-t border-slate-100 pt-4 text-center text-sm text-slate-500">
-              Chưa có tài khoản?{" "}
-              <Link to="/register" className="font-medium text-brand-600 hover:text-brand-700">
-                Đăng ký tại đây
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <p className="text-center text-sm text-slate-500">Chưa có tài khoản nhân viên?</p>
+              <Link
+                to="/register"
+                className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-brand-200 bg-white py-2.5 text-sm font-semibold text-brand-700 transition-colors duration-200 hover:bg-brand-50"
+              >
+                <UserPlus size={16} />
+                Đăng ký tài khoản
               </Link>
-            </p>
+            </div>
           </div>
         </div>
       </div>

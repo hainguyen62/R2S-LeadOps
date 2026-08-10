@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, X } from "lucide-react";
 
 /**
@@ -12,6 +13,7 @@ export default function ConfirmDialog({
   confirmLabel = "Xóa",
   cancelLabel = "Hủy",
   danger = true,
+  irreversible = danger,
   loading = false,
   onCancel,
   onConfirm,
@@ -29,7 +31,7 @@ export default function ConfirmDialog({
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[9998] bg-slate-900/50 flex items-center justify-center p-4"
       onMouseDown={(e) => e.target === e.currentTarget && onCancel?.()}
@@ -52,7 +54,9 @@ export default function ConfirmDialog({
         </div>
 
         <p className="text-sm text-slate-600 leading-relaxed">{message}</p>
-        <p className="text-xs text-red-500 mt-2 font-medium">Hành động này không thể hoàn tác.</p>
+        {irreversible && (
+          <p className="text-xs text-red-500 mt-2 font-medium">Hành động này không thể hoàn tác.</p>
+        )}
 
         <div className="flex gap-2 pt-5">
           <button
@@ -75,6 +79,7 @@ export default function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

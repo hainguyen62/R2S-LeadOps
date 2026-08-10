@@ -11,7 +11,7 @@ const courses = [
   "AWS Cloud Computing",
 ];
 
-export default function Register() {
+export default function Consultation() {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     fullName: "",

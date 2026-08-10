@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Sidebar from "./Sidebar.jsx";
 import Topbar from "./Topbar.jsx";
+import ScrollToTopButton from "../ui/ScrollToTopButton.jsx";
 
 export default function Layout({ user, onLogout, children }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -14,6 +15,7 @@ export default function Layout({ user, onLogout, children }) {
           <div className="p-6 space-y-6">{children}</div>
         </main>
       </div>
+      <ScrollToTopButton />
     </div>
   );
 }

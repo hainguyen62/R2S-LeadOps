@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import {
   AreaChart,
   Area,
@@ -13,7 +12,6 @@ import {
 } from "recharts";
 import ChartCard from "../ui/ChartCard.jsx";
 import { SkeletonBlock } from "../ui/Skeleton.jsx";
-import { fetchLeadsByDay, fetchLeadsByStatusClassification } from "../../services/dashboardService.js";
 
 const tooltipStyle = {
   background: "#ffffff",
@@ -25,28 +23,10 @@ const tooltipStyle = {
   padding: "8px 12px",
 };
 
-export default function LeadCharts() {
-  const [leadsByDay, setLeadsByDay] = useState([]);
-  const [classification, setClassification] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  // GET /api/dashboard/leads-by-course (theo ngày) + leads-by-status — xem dashboardService.js
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([fetchLeadsByDay(), fetchLeadsByStatusClassification()])
-      .then(([byDay, byClass]) => {
-        if (cancelled) return;
-        setLeadsByDay(byDay);
-        setClassification(byClass);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
+// Dữ liệu (leadsByDay, classification) và trạng thái loading giờ được
+// Dashboard.jsx tải theo dropdown khoảng thời gian dùng chung, truyền
+// xuống qua props — component này chỉ còn lo phần hiển thị biểu đồ.
+export default function LeadCharts({ leadsByDay, classification, loading }) {
   const totalClass = classification.reduce((a, c) => a + c.value, 0);
 
   if (loading) {
@@ -64,20 +44,7 @@ export default function LeadCharts() {
 
   return (
     <>
-      <ChartCard
-        title="Lead theo ngày"
-        className="lg:col-span-2"
-        action={
-          <select
-            defaultValue="7"
-            className="text-xs text-gray-600 border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
-          >
-            <option value="7">7 ngày qua</option>
-            <option value="14">14 ngày qua</option>
-            <option value="30">30 ngày qua</option>
-          </select>
-        }
-      >
+      <ChartCard title="Lead theo ngày" className="lg:col-span-2">
         <ResponsiveContainer width="100%" height={240}>
           <AreaChart data={leadsByDay} margin={{ left: -20, right: 10, top: 10 }}>
             <defs>

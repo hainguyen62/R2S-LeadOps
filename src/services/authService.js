@@ -37,6 +37,39 @@ export async function login({ email, password }) {
   return { id: account.id, name: account.name, role: account.role, email: account.email };
 }
 
+/**
+ * POST /api/auth/register — Đăng ký tài khoản nhân viên (Module 1: "Tạo tài khoản").
+ * Lưu ý: đây là form tự đăng ký cho nhân viên nội bộ (Sales/Marketing), KHÔNG phải
+ * form "Đăng ký nhận tư vấn" cho khách hàng (đó là luồng ở Register.jsx/leadService.js).
+ * Trong hệ thống thật, nên yêu cầu duyệt bởi Administrator trước khi tài khoản active
+ * (Mục XVII bảo mật) — bản mock này cho active ngay để tiện demo.
+ */
+export async function registerStaff({ name, email, password, role }) {
+  if (!USE_MOCK) {
+    return apiFetch("/auth/register", { method: "POST", body: { name, email, password, role } });
+  }
+
+  await mockDelay();
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const existing = mockUsers.find((u) => u.email.toLowerCase() === normalizedEmail);
+  if (existing) {
+    throw new ApiError("Email này đã được đăng ký tài khoản trong hệ thống.", {
+      status: 409,
+      fieldErrors: { email: "Email đã tồn tại." },
+    });
+  }
+
+  const newUser = {
+    id: mockUsers.length ? Math.max(...mockUsers.map((u) => u.id)) + 1 : 1,
+    name,
+    role: role || "Sales/Admissions",
+    email: normalizedEmail,
+    status: "Hoạt động",
+  };
+  mockUsers.push(newUser);
+  return { id: newUser.id, name: newUser.name, role: newUser.role, email: newUser.email };
+}
+
 /** POST /api/auth/logout */
 export async function logout() {
   if (!USE_MOCK) {

@@ -371,17 +371,17 @@ export const activityLogs = [
 ];
 
 export const users = [
-  { id: 1, name: "Tư vấn viên A", role: "Sales", email: "tva@r2s.edu.vn", status: "Hoạt động" },
-  { id: 2, name: "Tư vấn viên B", role: "Sales", email: "tvb@r2s.edu.vn", status: "Hoạt động" },
-  { id: 3, name: "Tư vấn viên C", role: "Sales", email: "tvc@r2s.edu.vn", status: "Hoạt động" },
-  { id: 4, name: "Leader Marketing", role: "Marketing", email: "marketing@r2s.edu.vn", status: "Hoạt động" },
-  { id: 5, name: "Admin", role: "Admin", email: "admin@r2s.edu.vn", status: "Hoạt động" },
+  { id: 1, name: "Tư vấn viên A", role: "Sales/Admissions", email: "tva@r2s.edu.vn", status: "Hoạt động" },
+  { id: 2, name: "Tư vấn viên B", role: "Sales/Admissions", email: "tvb@r2s.edu.vn", status: "Hoạt động" },
+  { id: 3, name: "Tư vấn viên C", role: "Sales/Admissions", email: "tvc@r2s.edu.vn", status: "Hoạt động" },
+  { id: 4, name: "Leader Marketing", role: "Leader Marketing", email: "marketing@r2s.edu.vn", status: "Hoạt động" },
+  { id: 5, name: "Admin", role: "Administrator", email: "admin@r2s.edu.vn", status: "Hoạt động" },
 ];
 
 // Người dùng hiện đang đăng nhập (demo) — dùng cho trang Profile
 export const currentUserProfile = {
   name: "Tư vấn viên A",
-  role: "Sales",
+  role: "Sales/Admissions",
   email: "tva@r2s.edu.vn",
   phone: "0901 111 222",
   department: "Phòng Tuyển sinh",

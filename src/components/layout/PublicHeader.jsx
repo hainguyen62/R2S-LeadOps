@@ -47,10 +47,10 @@ export default function PublicHeader() {
             Đăng Nhập
           </Link>
           <Link
-            to="/register"
+            to="/consultation"
             className="cursor-pointer rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors duration-200 hover:bg-brand-700"
           >
-            Đăng ký
+            Đăng ký nhận tư vấn
           </Link>
         </nav>
 
@@ -85,14 +85,14 @@ export default function PublicHeader() {
               onClick={() => setMenuOpen(false)}
               className="cursor-pointer rounded-lg border border-white/20 px-4 py-2.5 text-center text-sm font-semibold text-white"
             >
-              Login
+              Đăng nhập
             </Link>
             <Link
-              to="/register"
+              to="/consultation"
               onClick={() => setMenuOpen(false)}
               className="cursor-pointer rounded-lg bg-brand-600 px-4 py-2.5 text-center text-sm font-semibold text-white"
             >
-              Register
+              Đăng ký nhận tư vấn
             </Link>
           </div>
         </div>

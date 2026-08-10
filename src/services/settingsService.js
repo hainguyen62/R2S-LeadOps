@@ -43,7 +43,7 @@ export async function deleteUser(id) {
   await mockDelay();
   const idx = mockUsers.findIndex((u) => u.id === id);
   if (idx === -1) throw new ApiError("Không tìm thấy người dùng.", { status: 404 });
-  if (mockUsers[idx].role === "Admin") {
+  if (mockUsers[idx].role === "Administrator") {
     throw new ApiError("Không thể xóa tài khoản Admin.", { status: 403 });
   }
   const [removed] = mockUsers.splice(idx, 1);
