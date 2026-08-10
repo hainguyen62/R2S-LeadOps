@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { UserCheck, Phone, Mail, MessageCircle, GitBranch, Plus, AlertCircle } from "lucide-react";
+import { UserCheck, Phone, Mail, MessageCircle, GitBranch, Plus, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import Avatar from "../components/ui/Avatar.jsx";
 import Pill from "../components/ui/Pill.jsx";
 import { SkeletonBlock } from "../components/ui/Skeleton.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 import { statusStyle } from "../data/mockData.js";
 import { fetchAllActivities } from "../services/leadService.js";
+
+const pageSize = 10;
 
 const iconMap = {
   "Đã gọi điện": Phone,
@@ -19,13 +21,17 @@ export default function History() {
   const [allHistory, setAllHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [page, setPage] = useState(1);
 
   // Gộp từ GET /api/leads/{id}/activities của toàn bộ lead — xem leadService.js
   useEffect(() => {
     let cancelled = false;
     fetchAllActivities()
       .then((data) => {
-        if (!cancelled) setAllHistory(data);
+        if (!cancelled) {
+          setAllHistory(data);
+          setPage(1);
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(err.message || "Không thể tải lịch sử chăm sóc.");
@@ -37,6 +43,9 @@ export default function History() {
       cancelled = true;
     };
   }, []);
+
+  const totalPages = Math.max(1, Math.ceil(allHistory.length / pageSize));
+  const pageRows = allHistory.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="space-y-6">
@@ -58,7 +67,7 @@ export default function History() {
           <EmptyState icon={UserCheck} title="Chưa có hoạt động chăm sóc nào" compact />
         ) : (
         <div className="space-y-1">
-          {allHistory.map((h, i) => {
+          {pageRows.map((h, i) => {
             const Icon = iconMap[h.text.split(" ")[0]] || UserCheck;
             return (
               <div key={i} className="flex gap-4 py-3">
@@ -66,7 +75,7 @@ export default function History() {
                   <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
                     <Icon size={16} />
                   </div>
-                  {i < allHistory.length - 1 && <div className="w-px flex-1 bg-slate-200 my-1" />}
+                  {i < pageRows.length - 1 && <div className="w-px flex-1 bg-slate-200 my-1" />}
                 </div>
                 <div className="pb-3 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -85,6 +94,44 @@ export default function History() {
         </div>
         )}
       </div>
+
+      {/* Pagination */}
+      {!loading && !error && allHistory.length > 0 && (
+        <div className="flex items-center justify-between px-1 text-xs text-slate-500">
+          <span>
+            Hiển thị {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, allHistory.length)} của {allHistory.length}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="p-1.5 rounded-md border border-slate-300 hover:bg-slate-50 disabled:opacity-40"
+              disabled={page === 1}
+            >
+              <ChevronLeft size={14} />
+            </button>
+            {Array.from({ length: totalPages }).map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setPage(i + 1)}
+                className={`w-7 h-7 rounded-md text-xs ${
+                  page === i + 1
+                    ? "bg-brand-600 text-white"
+                    : "border border-slate-300 hover:bg-slate-50 text-slate-500"
+                }`}
+              >
+                {i + 1}
+              </button>
+            ))}
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="p-1.5 rounded-md border border-slate-300 hover:bg-slate-50 disabled:opacity-40"
+              disabled={page === totalPages}
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Quick status legend */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-card">
