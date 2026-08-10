@@ -19,7 +19,7 @@ export const leadsByDay = [
 ];
 
 export const classification = [
-  { name: "Nóng", value: 36, color: "#f97316" },
+  { name: "Nóng", value: 36, color: "#ef4444" },
   { name: "Ấm", value: 128, color: "#eab308" },
   { name: "Lạnh", value: 84, color: "#3b82f6" },
 ];

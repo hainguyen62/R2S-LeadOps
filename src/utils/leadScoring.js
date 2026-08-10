@@ -94,7 +94,7 @@ export const scoringMax = 100;
 // Phân loại theo tổng điểm — bao gồm cả mức "Không hợp lệ" theo đúng
 // bảng phân loại trong tài liệu (Mục VII.4).
 export const classificationRules = [
-  { cls: "Lead nóng", range: "70 – 100 điểm", action: "Liên hệ ưu tiên ngay", color: "#f97316", badgeClass: "bg-red-50 text-red-700 border border-red-200" },
+  { cls: "Lead nóng", range: "70 – 100 điểm", action: "Liên hệ ưu tiên ngay", color: "#ef4444", badgeClass: "bg-red-50 text-red-700 border border-red-200" },
   { cls: "Lead ấm", range: "40 – 69 điểm", action: "Tư vấn và tiếp tục nurturing", color: "#eab308", badgeClass: "bg-amber-50 text-amber-700 border border-amber-200" },
   { cls: "Lead lạnh", range: "1 – 39 điểm", action: "Nuôi dưỡng bằng tài liệu, nội dung", color: "#3b82f6", badgeClass: "bg-blue-50 text-blue-700 border border-blue-200" },
   { cls: "Không hợp lệ", range: "0 điểm hoặc bị đánh dấu spam", action: "Không đưa vào danh sách ưu tiên", color: "#94a3b8", badgeClass: "bg-slate-100 text-slate-500 border border-slate-200" },
