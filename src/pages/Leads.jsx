@@ -26,12 +26,14 @@ import {
 } from "lucide-react";
 import Pill from "../components/ui/Pill.jsx";
 import Avatar from "../components/ui/Avatar.jsx";
+import SourceBadge from "../components/ui/SourceBadge.jsx";
+import ClassBadge from "../components/ui/ClassBadge.jsx";
 import ScoreRulesCard from "../components/leads/ScoreRulesCard.jsx";
 import ConfirmDialog from "../components/ui/ConfirmDialog.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 import { LeadListSkeleton } from "../components/ui/Skeleton.jsx";
 import { useToast } from "../components/ui/ToastProvider.jsx";
-import { statusStyle, classStyle, leadStatusOrder } from "../data/mockData.js";
+import { statusStyle, leadStatusOrder } from "../data/mockData.js";
 import { fetchLeads, createLead, deleteLead, importLeads, exportLeadsCsv } from "../services/leadService.js";
 import { validateLeadForm, hasErrors } from "../utils/validators.js";
 import { exportToCsv } from "../utils/exportCsv.js";
@@ -391,10 +393,10 @@ export default function Leads() {
                     </div>
                   </td>
                   <td className="py-2.5 px-4 text-slate-500 whitespace-nowrap">{l.course}</td>
-                  <td className="py-2.5 px-4 text-slate-500 whitespace-nowrap">{l.source}</td>
+                  <td className="py-2.5 px-4 whitespace-nowrap"><SourceBadge source={l.source} /></td>
                   <td className="py-2.5 px-4"><Pill text={l.status} map={statusStyle} /></td>
                   <td className="py-2.5 px-4 font-medium text-slate-800">{l.score}</td>
-                  <td className="py-2.5 px-4"><Pill text={l.cls} map={classStyle} /></td>
+                  <td className="py-2.5 px-4"><ClassBadge cls={l.cls} /></td>
                   <td className="py-2.5 px-4 text-slate-500 whitespace-nowrap">{l.assignee}</td>
                   <td className="py-2.5 px-4 text-slate-400 whitespace-nowrap text-xs">{l.date}</td>
                   <td className="py-2.5 px-4" onClick={(e) => e.stopPropagation()}>
@@ -745,4 +747,4 @@ export default function Leads() {
       )}
     </div>
   );
-} 
+}

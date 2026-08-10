@@ -6,10 +6,10 @@
 import { scoreLead, classify } from "../utils/leadScoring.js";
 
 export const stats = [
-  { label: "Tổng lead", value: 248, sub: "Tất cả thời gian", icon: "Users", tint: "bg-blue-50 text-blue-600" },
-  { label: "Lead mới hôm nay", value: 12, sub: "+20% so với hôm qua", icon: "UserCheck", tint: "bg-emerald-50 text-emerald-600" },
-  { label: "Lead nóng", value: 36, sub: "+12% so với hôm qua", icon: "Flame", tint: "bg-orange-50 text-orange-600" },
-  { label: "Đã đăng ký", value: 18, sub: "+28% so với hôm qua", icon: "GitBranch", tint: "bg-violet-50 text-violet-600" },
+  { label: "Tổng lead", value: 248, sub: "Tất cả thời gian", icon: "Users", tint: "bg-blue-600" },
+  { label: "Lead mới hôm nay", value: 12, sub: "+20% so với hôm qua", icon: "UserPlus", tint: "bg-emerald-500" },
+  { label: "Lead nóng", value: 36, sub: "+12% so với hôm qua", icon: "Flame", tint: "bg-orange-500" },
+  { label: "Đã đăng ký", value: 18, sub: "+28% so với hôm qua", icon: "BadgeCheck", tint: "bg-violet-600" },
 ];
 
 export const leadsByDay = [
@@ -54,7 +54,7 @@ export const funnel = [
 ];
 
 export const statusStyle = {
-  "Lead mới": "bg-slate-100 text-slate-600",
+  "Lead mới": "bg-green-50 text-green-700",
   "Đã liên hệ": "bg-cyan-50 text-cyan-700",
   "Đang tư vấn": "bg-blue-50 text-blue-700",
   "Đang cân nhắc": "bg-amber-50 text-amber-700",
@@ -67,6 +67,32 @@ export const classStyle = {
   "Lead ấm": "bg-amber-50 text-amber-700",
   "Lead lạnh": "bg-blue-50 text-blue-700",
   "Không hợp lệ": "bg-slate-100 text-slate-500",
+};
+
+// Badge phân loại lead dạng "nền đặc/pastel + icon lửa/giọt nước", theo đúng
+// mẫu thiết kế Hi-Fi: Lead nóng nổi bật nền đỏ đặc chữ trắng; Lead ấm/lạnh/
+// không hợp lệ dùng nền pastel nhẹ hơn để không cạnh tranh với Lead nóng.
+export const classBadgeStyle = {
+  "Lead nóng": { badge: "bg-red-500 text-white", icon: "text-white" },
+  "Lead ấm": { badge: "bg-amber-100 text-amber-700 border border-amber-200", icon: "text-amber-600" },
+  "Lead lạnh": { badge: "bg-blue-50 text-blue-700 border border-blue-100", icon: "text-blue-500" },
+  "Không hợp lệ": { badge: "bg-slate-100 text-slate-500 border border-slate-200", icon: "text-slate-400" },
+};
+
+// Icon + màu thương hiệu hiển thị trước tên nguồn lead ở cột "Nguồn".
+export const sourceMeta = {
+  "Facebook": { icon: "Facebook", className: "text-[#1877F2]" },
+  "Facebook Ads": { icon: "Facebook", className: "text-[#1877F2]" },
+  "TikTok": { icon: "TikTok", className: "text-slate-900" },
+  "TikTok Ads": { icon: "TikTok", className: "text-slate-900" },
+  "Google Ads": { icon: "Megaphone", className: "text-[#EA4335]" },
+  "Google Form": { icon: "FileText", className: "text-[#7C3AED]" },
+  "Landing Page": { icon: "Globe", className: "text-blue-500" },
+  "Messenger": { icon: "MessageCircle", className: "text-[#0084FF]" },
+  "Zalo": { icon: "Zalo", className: "text-[#0068FF]" },
+  "Referral": { icon: "Share2", className: "text-sky-500" },
+  "Organic": { icon: "Sprout", className: "text-green-600" },
+  "Other": { icon: "MoreHorizontal", className: "text-slate-400" },
 };
 
 // Mỗi lead có `signals` — tập hợp các tín hiệu hành vi/thông tin thực tế
