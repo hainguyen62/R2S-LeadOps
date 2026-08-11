@@ -5,6 +5,17 @@
 
 import { scoreLead, classify } from "../utils/leadScoring.js";
 
+// Sinh mốc thời gian follow-up TƯƠNG ĐỐI so với "hôm nay" thật (new Date()),
+// thay vì hardcode ngày cố định — tránh lặp lại lỗi lệch "đồng hồ" giữa các
+// khối mock data (đã gặp ở phần biểu đồ Dashboard). offsetDays âm = quá khứ
+// (quá hạn), 0 = hôm nay, dương = tương lai (chưa đến hạn).
+function daysFromNow(offsetDays) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  d.setHours(9, 0, 0, 0);
+  return d.toISOString();
+}
+
 export const stats = [
   { label: "Tổng lead", value: 248, sub: "Tất cả thời gian", icon: "Users", tint: "bg-blue-600" },
   { label: "Lead mới hôm nay", value: 12, sub: "+20% so với hôm qua", icon: "UserPlus", tint: "bg-emerald-500" },
@@ -104,6 +115,8 @@ export const leads = [
   {
     id: 1, name: "Nguyễn Minh Anh", course: "Java Backend", source: "Facebook", status: "Đang tư vấn",
     date: "12/05/2026 09:15", phone: "0901 234 567", email: "minhanh@gmail.com", assignee: "Tư vấn viên A",
+    campaign: "Tuyển sinh khóa Java Backend",
+    nextFollowUpAt: daysFromNow(-2), // quá hạn 2 ngày
     facebook: "https://facebook.com/minhanh.nguyen",
     signals: {
       fitCourseDefined: true, fitTargetGroup: true, fitCareerGoal: true, fitScheduleMatch: true,
@@ -115,6 +128,8 @@ export const leads = [
   {
     id: 2, name: "Trần Quốc Huy", course: "ReactJS", source: "TikTok", status: "Lead mới",
     date: "12/05/2026 09:05", phone: "0902 345 678", email: "quochuy@gmail.com", assignee: "Tư vấn viên A",
+    campaign: "TikTok Viral – ReactJS",
+    nextFollowUpAt: null,
     tiktok: "https://tiktok.com/@quochuy.tran",
     signals: {
       fitCourseDefined: true, fitTargetGroup: true, fitCareerGoal: true,
@@ -126,6 +141,8 @@ export const leads = [
   {
     id: 3, name: "Lê Thu Hà", course: "Flutter", source: "Landing Page", status: "Đã đăng ký",
     date: "12/05/2026 08:50", phone: "0903 456 789", email: "thuha@gmail.com", assignee: "Tư vấn viên B",
+    campaign: "Landing Page mùa hè",
+    nextFollowUpAt: null, // đã đăng ký, không cần follow-up nữa
     signals: {
       fitCourseDefined: true, fitTargetGroup: true, fitPriorKnowledge: true, fitCareerGoal: true, fitScheduleMatch: true,
       enrollmentIntent: "7d",
@@ -135,7 +152,8 @@ export const leads = [
   },
   {
     id: 4, name: "Phạm Gia Bảo", course: "BA", source: "Google Form", status: "Đang tư vấn",
-    date: "12/05/2026 08:30", phone: "0904 567 890", email: "giabao@gmail.com", assignee: "Tư vấn viên B",
+    date: "12/05/2026 08:30", phone: "0904 567 890", email: "giabao@gmail.com", assignee: null, // chưa phân công
+    nextFollowUpAt: null,
     signals: {
       fitCourseDefined: true, fitTargetGroup: true,
       enrollmentIntent: "unknown",
@@ -146,6 +164,8 @@ export const leads = [
   {
     id: 5, name: "Võ Hoàng Nam", course: "Data Analyst", source: "Facebook", status: "Đang cân nhắc",
     date: "12/05/2026 08:12", phone: "0905 678 901", email: "hoangnam@gmail.com", assignee: "Tư vấn viên A",
+    campaign: "SEM Google – Data Analyst",
+    nextFollowUpAt: daysFromNow(0), // đến hạn hôm nay
     facebook: "https://facebook.com/hoangnam.vo",
     signals: {
       fitCourseDefined: true, fitCareerGoal: true,
@@ -156,7 +176,8 @@ export const leads = [
   },
   {
     id: 6, name: "Đặng Thảo Vy", course: "UI/UX Design", source: "TikTok", status: "Đang tư vấn",
-    date: "12/05/2026 07:58", phone: "0906 789 012", email: "thaovy@gmail.com", assignee: "Tư vấn viên C",
+    date: "12/05/2026 07:58", phone: "0906 789 012", email: "thaovy@gmail.com", assignee: null, // chưa phân công
+    nextFollowUpAt: null,
     tiktok: "https://tiktok.com/@thaovy.dang",
     signals: {
       fitCourseDefined: true, fitTargetGroup: true,
@@ -168,6 +189,8 @@ export const leads = [
   {
     id: 7, name: "Bùi Anh Tuấn", course: "Java Backend", source: "Landing Page", status: "Lead mới",
     date: "12/05/2026 07:40", phone: "0907 890 123", email: "anhtuan@gmail.com", assignee: "Tư vấn viên C",
+    campaign: "Tuyển sinh khóa Java Backend",
+    nextFollowUpAt: null,
     signals: {
       fitCourseDefined: true,
       enrollmentIntent: "unknown",
@@ -178,6 +201,7 @@ export const leads = [
   {
     id: 8, name: "Ngô Bảo Châu", course: "ReactJS", source: "Google Form", status: "Đã đăng ký",
     date: "12/05/2026 07:22", phone: "0908 901 234", email: "baochau@gmail.com", assignee: "Tư vấn viên A",
+    nextFollowUpAt: daysFromNow(-5), // quá hạn 5 ngày
     signals: {
       fitCourseDefined: true, fitTargetGroup: true, fitPriorKnowledge: true, fitCareerGoal: true, fitScheduleMatch: true,
       enrollmentIntent: "7d",
@@ -188,6 +212,8 @@ export const leads = [
   {
     id: 9, name: "Hoàng Mai Linh", course: "Java Backend", source: "Facebook", status: "Đã liên hệ",
     date: "11/05/2026 18:40", phone: "0909 012 345", email: "mailinh@gmail.com", assignee: "Tư vấn viên A",
+    campaign: "Tuyển sinh khóa Java Backend",
+    nextFollowUpAt: null,
     facebook: "https://facebook.com/mailinh.hoang",
     signals: {
       fitCourseDefined: true, fitTargetGroup: true, fitCareerGoal: true, fitScheduleMatch: true,
@@ -198,7 +224,9 @@ export const leads = [
   },
   {
     id: 10, name: "Phan Quốc An", course: "Data Analyst", source: "TikTok", status: "Đang cân nhắc",
-    date: "11/05/2026 16:12", phone: "0910 123 456", email: "quocan@gmail.com", assignee: "Tư vấn viên B",
+    date: "11/05/2026 16:12", phone: "0910 123 456", email: "quocan@gmail.com", assignee: null, // chưa phân công
+    campaign: "SEM Google – Data Analyst",
+    nextFollowUpAt: null,
     tiktok: "https://tiktok.com/@quocan.phan",
     signals: {
       fitCourseDefined: true,
@@ -210,6 +238,8 @@ export const leads = [
   {
     id: 11, name: "Trịnh Hồng Nhung", course: "UI/UX Design", source: "Landing Page", status: "Đang tư vấn",
     date: "11/05/2026 14:30", phone: "0911 234 567", email: "hongnhung@gmail.com", assignee: "Tư vấn viên C",
+    campaign: "Landing Page mùa hè",
+    nextFollowUpAt: daysFromNow(3), // chưa đến hạn
     signals: {
       fitCourseDefined: true, fitTargetGroup: true, fitCareerGoal: true,
       enrollmentIntent: "1-3m",
@@ -220,6 +250,7 @@ export const leads = [
   {
     id: 12, name: "Đỗ Minh Khoa", course: "Flutter", source: "Google Form", status: "Đã đặt cọc",
     date: "11/05/2026 11:05", phone: "0912 345 678", email: "minhkhoa@gmail.com", assignee: "Tư vấn viên A",
+    nextFollowUpAt: null, // đã đặt cọc, không cần follow-up nữa
     signals: {
       fitCourseDefined: true, fitTargetGroup: true, fitPriorKnowledge: true, fitCareerGoal: true, fitScheduleMatch: true,
       enrollmentIntent: "7d",
@@ -234,6 +265,7 @@ export const leads = [
     score,
     cls: classify(score, l),
     initials: l.name.split(" ").slice(-2).map((w) => w[0]).join("").toUpperCase(),
+    scoreUpdatedAt: l.scoreUpdatedAt || l.date,
   };
 });
 

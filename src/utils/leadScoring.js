@@ -185,3 +185,41 @@ export function priorityTier(score) {
   if (score >= 50) return "warm";
   return "cool";
 }
+
+// Suy ra ngày/giờ từ chuỗi "dd/mm/yyyy hh:mm" (định dạng dùng trong `date`,
+// lịch sử chăm sóc...) hoặc ISO string. Trả về null nếu không parse được.
+function parseVnDate(str) {
+  if (!str) return null;
+  if (str instanceof Date) return str;
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return new Date(str);
+  const [datePart, timePart = "00:00"] = String(str).split(" ");
+  const [d, m, y] = datePart.split("/").map(Number);
+  const [hh, mm] = timePart.split(":").map(Number);
+  if (!d || !m || !y) return null;
+  return new Date(y, m - 1, d, hh || 0, mm || 0);
+}
+
+/**
+ * "Lịch sử thay đổi điểm" (bảng lead_score_events, Mục IX + ví dụ Mục VII.6 kế
+ * hoạch: +20/+10/+8/+5/+5...). Vì dữ liệu mock không ghi log thời điểm phát sinh
+ * từng tín hiệu riêng lẻ, các mốc được suy ra từ breakdown hiện tại của lead,
+ * giãn cách lùi dần trước thời điểm tính điểm gần nhất (scoreUpdatedAt/date),
+ * cộng dồn (scoreAfter) theo đúng thứ tự thời gian tăng dần.
+ */
+export function getScoreHistory(lead) {
+  const breakdown = getScoreBreakdown(lead);
+  if (breakdown.length === 0) return [];
+
+  const anchor = parseVnDate(lead.scoreUpdatedAt || lead.date) || new Date();
+  const stepMinutes = 20;
+
+  let running = 0;
+  return breakdown.map((b, i) => {
+    running += Number(b.value);
+    return {
+      ...b,
+      scoreAfter: running,
+      date: new Date(anchor.getTime() - (breakdown.length - 1 - i) * stepMinutes * 60000),
+    };
+  });
+}

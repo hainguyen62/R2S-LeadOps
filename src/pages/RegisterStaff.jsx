@@ -70,7 +70,8 @@ export default function RegisterStaff() {
       <div className="mx-auto grid min-h-[100dvh] max-w-7xl items-center gap-12 px-4 pb-16 pt-24 sm:px-6 lg:grid-cols-2 lg:gap-16 lg:px-8">
         {/* Left — Hero */}
         <div className="text-center lg:text-left">
-          <span className="inline-flex items-center gap-2 rounded-full border border-brand-500/30 bg-brand-500/10 px-3 py-1 text-xs font-semibold text-brand-300">
+          <img src="/images/logor2s.jpg" alt="R2S" className="mx-auto lg:mx-0 h-14 w-14 rounded-2xl bg-white object-contain p-1.5 shadow-elevated" />
+          <span className="mt-5 inline-flex items-center gap-2 rounded-full border border-brand-500/30 bg-brand-500/10 px-3 py-1 text-xs font-semibold text-brand-300">
             Nội bộ R2S Academy
           </span>
           <h1 className="mt-5 text-4xl font-bold leading-tight text-white md:text-5xl">

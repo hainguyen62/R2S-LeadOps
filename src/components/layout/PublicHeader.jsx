@@ -18,8 +18,8 @@ export default function PublicHeader() {
           to="/"
           className="flex cursor-pointer items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#000c20]"
         >
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-sm font-bold text-white">
-            R2S
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white overflow-hidden shrink-0">
+            <img src="/images/logor2s.jpg" alt="R2S" className="w-full h-full object-contain" />
           </div>
           <div className="leading-tight">
             <p className="text-sm font-semibold text-white">

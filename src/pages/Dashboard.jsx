@@ -138,15 +138,15 @@ export default function Dashboard() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
         {totalLeadStat && <StatCard {...totalLeadStat} />}
         {loadingRange
-          ? Array.from({ length: 3 }).map((_, i) => (
+          ? Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="bg-white border border-slate-300 rounded-card p-6 h-[92px] animate-pulse" />
             ))
           : rangeError
           ? (
-            <div className="sm:col-span-2 xl:col-span-3">
+            <div className="sm:col-span-2 lg:col-span-3 xl:col-span-4">
               <EmptyState
                 compact
                 icon={AlertCircle}

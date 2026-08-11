@@ -39,8 +39,8 @@ export default function Sidebar({ open = false, onClose }) {
         }`}
       >
         <div className="h-16 flex items-center gap-2 px-5 border-b border-slate-800 shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center font-bold text-sm text-white shrink-0">
-            R2S
+          <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shrink-0 overflow-hidden">
+            <img src="/images/logor2s.jpg" alt="R2S" className="w-full h-full object-contain" />
           </div>
           <div className="leading-tight flex-1 min-w-0">
             <p className="text-sm font-semibold text-white truncate">R2S Academy</p>

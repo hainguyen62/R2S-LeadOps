@@ -1,9 +1,10 @@
-import { Users, UserPlus, Flame, BadgeCheck, TrendingUp, TrendingDown } from "lucide-react";
+import { Users, UserPlus, Flame, BadgeCheck, Wallet, TrendingUp, TrendingDown } from "lucide-react";
 
 const iconMap = {
   Users,
   UserPlus,
   Flame,
+  Wallet,
   BadgeCheck,
 };
 

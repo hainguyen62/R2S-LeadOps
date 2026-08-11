@@ -10,7 +10,7 @@
 
 import { apiFetch, USE_MOCK, mockDelay, ApiError } from "./apiClient.js";
 import { leads as mockLeads, careHistory as mockCareHistory } from "../data/mockData.js";
-import { scoreLead, classify, getScoreBreakdown, scoringGroups, deductionGroup } from "../utils/leadScoring.js";
+import { scoreLead, classify, getScoreBreakdown, getScoreHistory, scoringGroups, deductionGroup } from "../utils/leadScoring.js";
 import { normalizePhone, normalizeEmail } from "../utils/validators.js";
 
 // So khớp id nới lỏng: id trong mockData là number, nhưng id lấy từ URL
@@ -37,10 +37,22 @@ function toInitials(name) {
     .toUpperCase();
 }
 
+// Lần tương tác gần nhất — mốc hoạt động chăm sóc cuối cùng trong timeline
+// (mockCareHistory đã được push theo thứ tự thời gian tăng dần).
+function getLastInteractionAt(leadId) {
+  const hist = mockCareHistory[leadId];
+  if (!hist || hist.length === 0) return null;
+  return hist[hist.length - 1].date;
+}
+
 /**
  * GET /api/leads — danh sách lead có tìm kiếm/lọc/sắp xếp/phân trang.
- * params: { query, status, cls, sortKey, sortDir, page, pageSize }
+ * params: { query, status, cls, sortKey, sortDir, page, pageSize,
+ *           dateFrom, dateTo, scoreMin, scoreMax, overdueOnly,
+ *           course, source, assignee, campaign }
  * Trả về { items, total, page, pageSize } giống chuẩn phân trang REST phổ biến.
+ * Lead đã lưu trữ (archived=true) không hiển thị trong danh sách (Mục IX.2:
+ * không xóa cứng, dùng trạng thái lưu trữ thay cho xóa).
  */
 export async function fetchLeads(params = {}) {
   if (!USE_MOCK) {
@@ -48,18 +60,60 @@ export async function fetchLeads(params = {}) {
   }
 
   await mockDelay();
-  const { query = "", status = "Tất cả", cls = "Tất cả", sortKey, sortDir, page = 1, pageSize = 6 } = params;
+  const {
+    query = "",
+    status = "Tất cả",
+    cls = "Tất cả",
+    sortKey,
+    sortDir,
+    page = 1,
+    pageSize = 6,
+    dateFrom,
+    dateTo,
+    scoreMin,
+    scoreMax,
+    overdueOnly,
+    course = "Tất cả",
+    source = "Tất cả",
+    assignee = "Tất cả",
+    campaign = "Tất cả",
+  } = params;
 
+  const now = Date.now();
   let rows = mockLeads.filter((l) => {
+    if (l.archived) return false;
+
     const q = query.toLowerCase();
+    const qDigits = query.replace(/\D/g, "");
     const matchQ =
       !q ||
       l.name.toLowerCase().includes(q) ||
       l.course.toLowerCase().includes(q) ||
-      l.email.toLowerCase().includes(q);
+      l.email.toLowerCase().includes(q) ||
+      (qDigits && (l.phone || "").replace(/\D/g, "").includes(qDigits));
+
     const matchS = status === "Tất cả" || l.status === status;
     const matchC = cls === "Tất cả" || l.cls === cls;
-    return matchQ && matchS && matchC;
+
+    const leadTime = getSortValue(l, "date");
+    const matchDateFrom = !dateFrom || leadTime >= new Date(dateFrom).getTime();
+    const matchDateTo = !dateTo || leadTime <= new Date(dateTo).getTime() + 86399999; // hết ngày đến
+
+    const matchScoreMin = scoreMin === undefined || scoreMin === "" || l.score >= Number(scoreMin);
+    const matchScoreMax = scoreMax === undefined || scoreMax === "" || l.score <= Number(scoreMax);
+
+    const matchOverdue = !overdueOnly || (l.nextFollowUpAt && new Date(l.nextFollowUpAt).getTime() <= now);
+
+    const matchCourse = course === "Tất cả" || l.course === course;
+    const matchSource = source === "Tất cả" || l.source === source;
+    const matchAssignee =
+      assignee === "Tất cả" || (assignee === "Chưa phân công" ? !l.assignee : l.assignee === assignee);
+    const matchCampaign = campaign === "Tất cả" || l.campaign === campaign;
+
+    return (
+      matchQ && matchS && matchC && matchDateFrom && matchDateTo && matchScoreMin && matchScoreMax &&
+      matchOverdue && matchCourse && matchSource && matchAssignee && matchCampaign
+    );
   });
 
   if (sortKey && sortDir) {
@@ -74,7 +128,7 @@ export async function fetchLeads(params = {}) {
 
   const total = rows.length;
   const start = (page - 1) * pageSize;
-  const items = rows.slice(start, start + pageSize);
+  const items = rows.slice(start, start + pageSize).map((l) => ({ ...l, lastInteractionAt: getLastInteractionAt(l.id) }));
   return { items: clone(items), total, page, pageSize };
 }
 
@@ -85,7 +139,40 @@ function getSortValue(l, key) {
     const [hh, mm] = timePart.split(":").map(Number);
     return new Date(y, (m || 1) - 1, d || 1, hh || 0, mm || 0).getTime();
   }
+  if (key === "nextFollowUpAt") {
+    return l.nextFollowUpAt ? new Date(l.nextFollowUpAt).getTime() : null;
+  }
+  if (key === "lastInteractionAt") {
+    const v = getLastInteractionAt(l.id);
+    if (!v) return null;
+    const [datePart, timePart = "00:00"] = String(v).split(" ");
+    const [d, m, y] = datePart.split("/").map(Number);
+    const [hh, mm] = timePart.split(":").map(Number);
+    return new Date(y, (m || 1) - 1, d || 1, hh || 0, mm || 0).getTime();
+  }
   return l[key];
+}
+
+/**
+ * Danh sách giá trị duy nhất để đổ vào 4 bộ lọc nâng cao mới (Khóa học, Nguồn,
+ * Nhân viên phụ trách, Chiến dịch) — lấy trên TOÀN BỘ dữ liệu, không chỉ trang
+ * hiện tại, để bộ lọc luôn đầy đủ lựa chọn dù đang ở trang nào / đã lọc gì.
+ */
+export async function fetchLeadFilterOptions() {
+  if (!USE_MOCK) return apiFetch("/leads/filter-options");
+  await mockDelay(100);
+  const active = mockLeads.filter((l) => !l.archived);
+  const courses = [...new Set(active.map((l) => l.course).filter(Boolean))].sort();
+  const sources = [...new Set(active.map((l) => l.source).filter(Boolean))].sort();
+  const assignees = [...new Set(active.map((l) => l.assignee).filter(Boolean))].sort();
+  const hasUnassigned = active.some((l) => !l.assignee);
+  const campaignsList = [...new Set(active.map((l) => l.campaign).filter(Boolean))].sort();
+  return {
+    courses,
+    sources,
+    assignees: hasUnassigned ? [...assignees, "Chưa phân công"] : assignees,
+    campaigns: campaignsList,
+  };
 }
 
 /**
@@ -189,6 +276,7 @@ export async function createLead(payload) {
   };
   newLead.score = scoreLead(newLead);
   newLead.cls = classify(newLead.score, newLead);
+  newLead.scoreUpdatedAt = newLead.date;
 
   mockLeads.unshift(newLead);
   return clone(newLead);
@@ -291,6 +379,11 @@ function appendActivity(id, activity) {
   if (!mockCareHistory[id]) mockCareHistory[id] = [];
   const entry = { ...activity, date: activity.date || new Date().toLocaleString("vi-VN") };
   mockCareHistory[id].push(entry);
+
+  // Mục VII.5: hệ thống tính lại điểm khi lead có hành động chăm sóc mới.
+  const idx = mockLeads.findIndex((l) => matchId(l.id, id));
+  if (idx !== -1) mockLeads[idx].scoreUpdatedAt = entry.date;
+
   return clone(entry);
 }
 
@@ -310,7 +403,20 @@ export async function recalculateLeadScore(id) {
   if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
   mockLeads[idx].score = scoreLead(mockLeads[idx]);
   mockLeads[idx].cls = classify(mockLeads[idx].score, mockLeads[idx]);
+  mockLeads[idx].scoreUpdatedAt = new Date().toLocaleString("vi-VN");
   return { score: mockLeads[idx].score, cls: mockLeads[idx].cls, breakdown: getScoreBreakdown(mockLeads[idx]) };
+}
+
+/**
+ * GET /api/leads/{id}/score-events — "Lịch sử thay đổi điểm" (Mục VII.6 + IX:
+ * bảng lead_score_events). Xem utils/leadScoring.js::getScoreHistory().
+ */
+export async function fetchLeadScoreEvents(id) {
+  if (!USE_MOCK) return apiFetch(`/leads/${id}/score-events`);
+  await mockDelay(150);
+  const lead = mockLeads.find((l) => matchId(l.id, id));
+  if (!lead) throw new ApiError("Không tìm thấy lead.", { status: 404 });
+  return clone(getScoreHistory(lead));
 }
 
 /** GET /api/scoring-rules — dùng cho ScoreRulesCard */

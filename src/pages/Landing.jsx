@@ -152,8 +152,8 @@ export default function Landing() {
       <header className="fixed inset-x-0 top-0 z-40 border-b border-slate-200/80 bg-[#F8FAFC]/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link to="/" className={`flex items-center gap-2.5 cursor-pointer ${focusRing} rounded-lg`}>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-sm font-bold text-white">
-              R2S
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white overflow-hidden shrink-0">
+              <img src="/images/logor2s.jpg" alt="R2S" className="w-full h-full object-contain" />
             </div>
             <div className="leading-tight">
               <p className="font-display text-sm font-semibold text-slate-900">R2S LeadOps</p>
@@ -583,8 +583,8 @@ export default function Landing() {
       <footer className="border-t border-slate-200 bg-white py-10">
         <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-6 px-4 sm:flex-row sm:items-center sm:px-6 lg:px-8">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-xs font-bold text-white">
-              R2S
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white overflow-hidden shrink-0">
+              <img src="/images/logor2s.jpg" alt="R2S" className="w-full h-full object-contain" />
             </div>
             <div>
               <p className="font-display text-sm font-semibold text-slate-900">R2S LeadOps</p>

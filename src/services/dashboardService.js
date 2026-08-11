@@ -129,6 +129,7 @@ export async function fetchDashboardByRange(days) {
     const currentTotal = funnel[0].value;
     const funnelAll = funnel.map((f) => ({ name: f.name, fill: f.fill, value: f.value, pct: f.pct }));
     const registeredTotal = funnelAll[funnelAll.length - 1].value;
+    const depositedTotal = funnelAll[funnelAll.length - 2].value; // "Đã đặt cọc" — áp chót trong phễu
     const hotTotal = classification.find((c) => c.name === "Nóng").value;
 
     // Biểu đồ "Lead theo ngày" chưa có lịch sử đầy đủ trong mock — hiển thị
@@ -147,6 +148,7 @@ export async function fetchDashboardByRange(days) {
       statsRange: [
         { key: "new", label: "Lead mới", value: currentTotal, sub: "Tất cả thời gian", icon: "UserPlus", tint: "bg-emerald-500" },
         { key: "hot", label: "Lead nóng", value: hotTotal, sub: "Tất cả thời gian", icon: "Flame", tint: "bg-orange-500" },
+        { key: "deposited", label: "Đã đặt cọc", value: depositedTotal, sub: "Tất cả thời gian", icon: "Wallet", tint: "bg-sky-500" },
         { key: "registered", label: "Đã đăng ký", value: registeredTotal, sub: "Tất cả thời gian", icon: "BadgeCheck", tint: "bg-violet-600" },
       ],
     });
@@ -187,6 +189,11 @@ export async function fetchDashboardByRange(days) {
   const registeredRatio = funnel[funnel.length - 1].value / funnel[0].value;
   const registeredPrevTotal = Math.round(prevTotal * registeredRatio);
 
+  // "Đã đặt cọc" — bậc áp chót trong phễu, cùng cơ chế tính với "Đã đăng ký".
+  const depositedTotal = funnelForRange[funnelForRange.length - 2].value;
+  const depositedRatio = funnel[funnel.length - 2].value / funnel[0].value;
+  const depositedPrevTotal = Math.round(prevTotal * depositedRatio);
+
   const compareLabel = days === 1 ? "hôm qua" : `${days} ngày trước`;
 
   return clone({
@@ -197,6 +204,7 @@ export async function fetchDashboardByRange(days) {
     statsRange: [
       { key: "new", label: "Lead mới", value: currentTotal, sub: pctChange(currentTotal, prevTotal, compareLabel), icon: "UserPlus", tint: "bg-emerald-500" },
       { key: "hot", label: "Lead nóng", value: classForRange.find((c) => c.name === "Nóng").value, sub: pctChange(classForRange.find((c) => c.name === "Nóng").value, hotPrevTotal, compareLabel), icon: "Flame", tint: "bg-orange-500" },
+      { key: "deposited", label: "Đã đặt cọc", value: depositedTotal, sub: pctChange(depositedTotal, depositedPrevTotal, compareLabel), icon: "Wallet", tint: "bg-sky-500" },
       { key: "registered", label: "Đã đăng ký", value: registeredTotal, sub: pctChange(registeredTotal, registeredPrevTotal, compareLabel), icon: "BadgeCheck", tint: "bg-violet-600" },
     ],
   });
@@ -209,6 +217,34 @@ export async function fetchHotLeads(limit = 5) {
   const rows = [...mockLeads]
     .filter((l) => priorityTier(l.score) !== "cool")
     .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+  return clone(rows);
+}
+
+/** Lead chưa có Sales phụ trách (assignee null/undefined/rỗng) — điểm cao nhất trước. */
+export async function fetchUnassignedLeads(limit = 5) {
+  if (!USE_MOCK) return apiFetch("/dashboard/unassigned-leads", { params: { limit } });
+  await mockDelay(300);
+  const rows = [...mockLeads]
+    .filter((l) => !l.assignee)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+  return clone(rows);
+}
+
+/**
+ * Lead đến hạn/quá hạn follow-up (Mục V.2 + IX: `next_follow_up_at`).
+ * "Đến hạn" = nextFollowUpAt đã được đặt VÀ <= thời điểm hiện tại — lead có
+ * lịch hẹn trong tương lai (chưa tới hạn) KHÔNG hiển thị ở đây. Quá hạn lâu
+ * nhất lên đầu (khớp KPI "Số follow-up quá hạn" ở Mục XII.2 kế hoạch).
+ */
+export async function fetchFollowUpLeads(limit = 5) {
+  if (!USE_MOCK) return apiFetch("/dashboard/followup-leads", { params: { limit } });
+  await mockDelay(300);
+  const now = new Date();
+  const rows = [...mockLeads]
+    .filter((l) => l.nextFollowUpAt && new Date(l.nextFollowUpAt) <= now)
+    .sort((a, b) => new Date(a.nextFollowUpAt) - new Date(b.nextFollowUpAt))
     .slice(0, limit);
   return clone(rows);
 }

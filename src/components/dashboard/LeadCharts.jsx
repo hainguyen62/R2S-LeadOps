@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   AreaChart,
   Area,
@@ -11,7 +12,21 @@ import {
   Cell,
 } from "recharts";
 import ChartCard from "../ui/ChartCard.jsx";
+import SearchableSelect from "../ui/SearchableSelect.jsx";
 import { SkeletonBlock } from "../ui/Skeleton.jsx";
+
+// Danh sách mặc định — có thể override bằng props courseOptions / statusOptions
+// nếu Dashboard.jsx muốn truyền danh sách lấy từ API (/api/courses, /api/lead-statuses).
+const DEFAULT_COURSES = ["Java Backend", "ReactJS", "Flutter", "Business Analyst"];
+const DEFAULT_STATUSES = [
+  "Lead mới",
+  "Đã liên hệ",
+  "Đang tư vấn",
+  "Đang cân nhắc",
+  "Đã đặt cọc",
+  "Đã đăng ký",
+  "Không phù hợp",
+];
 
 const tooltipStyle = {
   background: "#ffffff",
@@ -26,8 +41,28 @@ const tooltipStyle = {
 // Dữ liệu (leadsByDay, classification) và trạng thái loading giờ được
 // Dashboard.jsx tải theo dropdown khoảng thời gian dùng chung, truyền
 // xuống qua props — component này chỉ còn lo phần hiển thị biểu đồ.
-export default function LeadCharts({ leadsByDay, classification, loading }) {
+export default function LeadCharts({
+  leadsByDay,
+  classification,
+  loading,
+  courseOptions = DEFAULT_COURSES,
+  statusOptions = DEFAULT_STATUSES,
+  onCourseFilterChange,
+  onStatusFilterChange,
+}) {
   const totalClass = classification.reduce((a, c) => a + c.value, 0);
+  const [courseFilter, setCourseFilter] = useState(null);
+  const [statusFilter, setStatusFilter] = useState(null);
+
+  function handleCourseChange(v) {
+    setCourseFilter(v);
+    onCourseFilterChange?.(v);
+  }
+
+  function handleStatusChange(v) {
+    setStatusFilter(v);
+    onStatusFilterChange?.(v);
+  }
 
   if (loading) {
     return (
@@ -44,7 +79,26 @@ export default function LeadCharts({ leadsByDay, classification, loading }) {
 
   return (
     <>
-      <ChartCard title="Lead theo ngày" className="lg:col-span-2">
+      <ChartCard
+        title="Lead theo ngày"
+        className="lg:col-span-2"
+        action={
+          <div className="flex items-center gap-2">
+            <SearchableSelect
+              label="Khóa học"
+              options={courseOptions}
+              value={courseFilter}
+              onChange={handleCourseChange}
+            />
+            <SearchableSelect
+              label="Trạng thái"
+              options={statusOptions}
+              value={statusFilter}
+              onChange={handleStatusChange}
+            />
+          </div>
+        }
+      >
         <ResponsiveContainer width="100%" height={240}>
           <AreaChart data={leadsByDay} margin={{ left: -20, right: 10, top: 10 }}>
             <defs>

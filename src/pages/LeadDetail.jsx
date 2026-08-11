@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Flame, Droplet, UserCheck, ChevronDown, Check, AlertCircle } from "lucide-react";
+import { ArrowLeft, Flame, Droplet, UserCheck, ChevronDown, Check, AlertCircle, Users, X, Loader2, CalendarClock, PlusCircle, Clock, History as HistoryIcon } from "lucide-react";
 import Pill from "../components/ui/Pill.jsx";
 import Avatar from "../components/ui/Avatar.jsx";
 import ContactButtons from "../components/ui/ContactButtons.jsx";
@@ -8,8 +8,33 @@ import { LeadDetailSkeleton } from "../components/ui/Skeleton.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 import { useToast } from "../components/ui/ToastProvider.jsx";
 import { statusStyle, classStyle, leadStatusOrder } from "../data/mockData.js";
-import { fetchLeadById, fetchLeadActivities, updateLeadStatus } from "../services/leadService.js";
+import { fetchLeadById, fetchLeadActivities, updateLeadStatus, assignLead, addLeadActivity, updateLead, fetchLeadScoreEvents } from "../services/leadService.js";
+import { fetchUsers } from "../services/settingsService.js";
 import { priorityTier, getScoreBreakdown } from "../utils/leadScoring.js";
+
+// Loại hoạt động chăm sóc (Module 4 - Mục VI kế hoạch)
+const activityTypes = [
+  "Gọi điện",
+  "Messenger",
+  "Zalo",
+  "Email",
+  "Tư vấn trực tiếp",
+  "Họp online",
+  "Gửi tài liệu",
+  "Hẹn gọi lại",
+  "Ghi chú nội bộ",
+];
+
+// Kết quả sau tương tác (Mục V.2 kế hoạch)
+const activityResults = [
+  "Không nghe máy",
+  "Đã kết nối",
+  "Cần tư vấn thêm",
+  "Hẹn gọi lại",
+  "Đang cân nhắc",
+  "Đồng ý đặt cọc",
+  "Không phù hợp",
+];
 
 // Cùng bộ 3 cấp độ ưu tiên với popup Chi tiết lead ở Dashboard, để icon
 // lửa/giọt nước và badge nhất quán xuyên suốt ứng dụng.
@@ -25,21 +50,40 @@ export default function LeadDetail() {
   const toast = useToast();
   const [lead, setLead] = useState(null);
   const [history, setHistory] = useState([]);
+  const [scoreEvents, setScoreEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [statusOpen, setStatusOpen] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+
+  // ---- Phân công lead (Module 5) ----
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignees, setAssignees] = useState([]);
+  const [assigneesLoading, setAssigneesLoading] = useState(false);
+  const [assignForm, setAssignForm] = useState({ assignee: "", reason: "" });
+  const [assigning, setAssigning] = useState(false);
+
+  // ---- Thêm hoạt động chăm sóc (Module 4) ----
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [activityForm, setActivityForm] = useState({ type: "Gọi điện", content: "", result: "" });
+  const [addingActivity, setAddingActivity] = useState(false);
+
+  // ---- Đặt lịch follow-up (Mục V.2, IX: next_follow_up_at) ----
+  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [followUpForm, setFollowUpForm] = useState({ datetime: "", note: "" });
+  const [savingFollowUp, setSavingFollowUp] = useState(false);
 
   // GET /api/leads/{id} + GET /api/leads/{id}/activities — xem leadService.js
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    Promise.all([fetchLeadById(id), fetchLeadActivities(id)])
-      .then(([l, h]) => {
+    Promise.all([fetchLeadById(id), fetchLeadActivities(id), fetchLeadScoreEvents(id)])
+      .then(([l, h, se]) => {
         if (cancelled) return;
         setLead(l);
         setHistory(h);
+        setScoreEvents(se);
       })
       .catch((err) => {
         if (!cancelled) setError(err.message || "Không thể tải thông tin lead.");
@@ -114,6 +158,94 @@ export default function LeadDetail() {
     }
   };
 
+  const refreshLead = async () => {
+    const [l, h, se] = await Promise.all([fetchLeadById(lead.id), fetchLeadActivities(lead.id), fetchLeadScoreEvents(lead.id)]);
+    setLead(l);
+    setHistory(h);
+    setScoreEvents(se);
+  };
+
+  // GET /api/users — mở modal Phân công là lúc mới cần danh sách Sales, không tải sẵn
+  // từ đầu trang để tránh gọi API thừa cho những lead không ai mở modal này.
+  const openAssignModal = async () => {
+    setAssignForm({ assignee: lead.assignee || "", reason: "" });
+    setAssignOpen(true);
+    setAssigneesLoading(true);
+    try {
+      const users = await fetchUsers();
+      setAssignees(users.filter((u) => u.role === "Sales/Admissions"));
+    } catch {
+      toast.error("Không thể tải danh sách Sales.");
+    } finally {
+      setAssigneesLoading(false);
+    }
+  };
+
+  // PATCH /api/leads/{id}/assignment — xem leadService.js
+  const handleAssign = async (e) => {
+    e.preventDefault();
+    if (!assignForm.assignee) return;
+    if (assignForm.assignee === lead.assignee) {
+      setAssignOpen(false);
+      return;
+    }
+    setAssigning(true);
+    try {
+      await assignLead(lead.id, { assignee: assignForm.assignee, reason: assignForm.reason.trim() || undefined });
+      await refreshLead();
+      toast.success(`Đã phân công lead cho ${assignForm.assignee}.`);
+      setAssignOpen(false);
+    } catch (err) {
+      toast.error(err.message || "Phân công thất bại.");
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  // POST /api/leads/{id}/activities — xem leadService.js
+  const handleAddActivity = async (e) => {
+    e.preventDefault();
+    if (!activityForm.content.trim()) return;
+    setAddingActivity(true);
+    try {
+      const text = activityForm.result
+        ? `${activityForm.type}: ${activityForm.content.trim()} — Kết quả: ${activityForm.result}`
+        : `${activityForm.type}: ${activityForm.content.trim()}`;
+      await addLeadActivity(lead.id, { text, channel: lead.assignee || "Hệ thống" });
+      await refreshLead();
+      toast.success("Đã ghi nhận hoạt động chăm sóc.");
+      setActivityOpen(false);
+      setActivityForm({ type: "Gọi điện", content: "", result: "" });
+    } catch (err) {
+      toast.error(err.message || "Ghi nhận hoạt động thất bại.");
+    } finally {
+      setAddingActivity(false);
+    }
+  };
+
+  // PUT /api/leads/{id} (cập nhật next_follow_up_at) — xem leadService.js
+  const handleSaveFollowUp = async (e) => {
+    e.preventDefault();
+    if (!followUpForm.datetime) return;
+    setSavingFollowUp(true);
+    try {
+      await updateLead(lead.id, { nextFollowUpAt: new Date(followUpForm.datetime).toISOString() });
+      const formatted = new Date(followUpForm.datetime).toLocaleString("vi-VN");
+      await addLeadActivity(lead.id, {
+        text: `Đặt lịch follow-up lúc ${formatted}${followUpForm.note.trim() ? ` — Ghi chú: ${followUpForm.note.trim()}` : ""}`,
+        channel: lead.assignee || "Hệ thống",
+      });
+      await refreshLead();
+      toast.success("Đã đặt lịch follow-up.");
+      setFollowUpOpen(false);
+      setFollowUpForm({ datetime: "", note: "" });
+    } catch (err) {
+      toast.error(err.message || "Đặt lịch follow-up thất bại.");
+    } finally {
+      setSavingFollowUp(false);
+    }
+  };
+
   const breakdown = getScoreBreakdown(lead);
   const tier = priorityTier(lead.score);
   const style = priorityStyles[tier];
@@ -155,14 +287,32 @@ export default function LeadDetail() {
                   <span className="text-slate-500">Email</span>
                   <span className="text-slate-800 text-right truncate">{lead.email}</span>
                 </div>
-                <div className="flex justify-between gap-3">
+                <div className="flex justify-between gap-3 items-center">
                   <span className="text-slate-500">Người phụ trách</span>
-                  <span className="text-slate-800">{lead.assignee}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-slate-800">{lead.assignee || "Chưa phân công"}</span>
+                    <button
+                      onClick={openAssignModal}
+                      title="Phân công / chuyển người phụ trách"
+                      className="text-brand-600 hover:text-brand-700 shrink-0"
+                    >
+                      <Users size={13} />
+                    </button>
+                  </span>
                 </div>
                 <div className="flex justify-between gap-3">
                   <span className="text-slate-500">Ngày tạo</span>
                   <span className="text-slate-800">{lead.date}</span>
                 </div>
+                {lead.nextFollowUpAt && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-slate-500">Lịch follow-up</span>
+                    <span className={new Date(lead.nextFollowUpAt) <= new Date() ? "text-red-600 font-medium" : "text-slate-800"}>
+                      {new Date(lead.nextFollowUpAt).toLocaleString("vi-VN")}
+                      {new Date(lead.nextFollowUpAt) <= new Date() ? " (quá hạn)" : ""}
+                    </span>
+                  </div>
+                )}
               </div>
               {/* Liên hệ nhanh — bấm là mở kênh tương ứng ngay, không cần copy số/email */}
               <div className="mt-3 border-t border-slate-100 pt-3">
@@ -192,6 +342,12 @@ export default function LeadDetail() {
               <Pill text={lead.cls} map={classStyle} />
             </div>
 
+            {lead.scoreUpdatedAt && (
+              <p className="flex items-center gap-1 text-[11px] text-slate-400">
+                <Clock size={11} /> Tính điểm lúc: {lead.scoreUpdatedAt}
+              </p>
+            )}
+
             {breakdown.length > 0 && (
               <div className="border-t border-slate-100 pt-3 space-y-1.5">
                 {breakdown.map((b, i) => (
@@ -208,16 +364,52 @@ export default function LeadDetail() {
                 ))}
               </div>
             )}
+
+            {scoreEvents.length > 0 && (
+              <div className="border-t border-slate-100 pt-3">
+                <p className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 mb-2">
+                  <HistoryIcon size={12} /> Lịch sử thay đổi điểm
+                </p>
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {scoreEvents.map((ev, i) => (
+                    <div key={i} className="flex items-start justify-between gap-3 text-xs">
+                      <div className="min-w-0">
+                        <p className="text-slate-600 truncate">{ev.label}</p>
+                        <p className="text-[10px] text-slate-400">{ev.date.toLocaleString("vi-VN")}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className={ev.value.trim().startsWith("-") ? "text-red-600 font-medium" : "text-emerald-600 font-medium"}>
+                          {ev.value}
+                        </span>
+                        <p className="text-[10px] text-slate-400">→ {ev.scoreAfter}đ</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Hành động */}
           <div className="space-y-2">
             <div className="grid grid-cols-2 gap-2">
-              <button className="border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50">
-                + Hoạt động
+              <button
+                onClick={() => { setActivityForm({ type: "Gọi điện", content: "", result: "" }); setActivityOpen(true); }}
+                className="flex items-center justify-center gap-1.5 border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50"
+              >
+                <PlusCircle size={14} /> Hoạt động
               </button>
-              <button className="border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50">
-                Follow-up
+              <button
+                onClick={() => {
+                  setFollowUpForm({
+                    datetime: lead.nextFollowUpAt ? lead.nextFollowUpAt.slice(0, 16) : "",
+                    note: "",
+                  });
+                  setFollowUpOpen(true);
+                }}
+                className="flex items-center justify-center gap-1.5 border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50"
+              >
+                <CalendarClock size={14} /> Follow-up
               </button>
             </div>
             <div className="relative">
@@ -273,6 +465,189 @@ export default function LeadDetail() {
           </div>
         </div>
       </div>
+
+      {/* ---- Modal: Phân công lead (Module 5) ---- */}
+      {assignOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-sm shadow-elevated">
+            <div className="flex items-center justify-between px-6 pt-6 pb-2">
+              <h3 className="font-semibold text-slate-900">Phân công lead</h3>
+              <button onClick={() => setAssignOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleAssign} className="px-6 pb-6 space-y-3">
+              <p className="text-xs text-slate-500">
+                Đang phụ trách: <span className="font-medium text-slate-700">{lead.assignee || "Chưa phân công"}</span>
+              </p>
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Phân công cho *</label>
+                {assigneesLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
+                    <Loader2 size={14} className="animate-spin" /> Đang tải danh sách Sales...
+                  </div>
+                ) : (
+                  <select
+                    value={assignForm.assignee}
+                    onChange={(e) => setAssignForm({ ...assignForm, assignee: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  >
+                    <option value="">Chọn nhân viên Sales</option>
+                    {assignees.map((u) => (
+                      <option key={u.id} value={u.name}>{u.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Lý do chuyển (tùy chọn)</label>
+                <input
+                  value={assignForm.reason}
+                  onChange={(e) => setAssignForm({ ...assignForm, reason: e.target.value })}
+                  placeholder="VD: Cân bằng tải, Sales A đang nghỉ..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setAssignOpen(false)}
+                  className="flex-1 border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={assigning || !assignForm.assignee}
+                  className="flex-1 bg-brand-600 hover:bg-brand-500 rounded-lg py-2 text-sm text-white disabled:opacity-60 inline-flex items-center justify-center gap-1.5"
+                >
+                  {assigning && <Loader2 size={14} className="animate-spin" />}
+                  {assigning ? "Đang phân công..." : "Xác nhận phân công"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ---- Modal: Thêm hoạt động chăm sóc (Module 4) ---- */}
+      {activityOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-sm shadow-elevated">
+            <div className="flex items-center justify-between px-6 pt-6 pb-2">
+              <h3 className="font-semibold text-slate-900">Thêm hoạt động chăm sóc</h3>
+              <button onClick={() => setActivityOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleAddActivity} className="px-6 pb-6 space-y-3">
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Loại hoạt động *</label>
+                <select
+                  value={activityForm.type}
+                  onChange={(e) => setActivityForm({ ...activityForm, type: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+                >
+                  {activityTypes.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Nội dung *</label>
+                <textarea
+                  value={activityForm.content}
+                  onChange={(e) => setActivityForm({ ...activityForm, content: e.target.value })}
+                  rows={3}
+                  placeholder="Ghi lại nội dung trao đổi..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 resize-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Kết quả (tùy chọn)</label>
+                <select
+                  value={activityForm.result}
+                  onChange={(e) => setActivityForm({ ...activityForm, result: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+                >
+                  <option value="">Không chọn</option>
+                  {activityResults.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setActivityOpen(false)}
+                  className="flex-1 border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={addingActivity || !activityForm.content.trim()}
+                  className="flex-1 bg-brand-600 hover:bg-brand-500 rounded-lg py-2 text-sm text-white disabled:opacity-60 inline-flex items-center justify-center gap-1.5"
+                >
+                  {addingActivity && <Loader2 size={14} className="animate-spin" />}
+                  {addingActivity ? "Đang lưu..." : "Lưu hoạt động"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ---- Modal: Đặt lịch follow-up ---- */}
+      {followUpOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-sm shadow-elevated">
+            <div className="flex items-center justify-between px-6 pt-6 pb-2">
+              <h3 className="font-semibold text-slate-900">Đặt lịch follow-up</h3>
+              <button onClick={() => setFollowUpOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleSaveFollowUp} className="px-6 pb-6 space-y-3">
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Thời gian cần liên hệ lại *</label>
+                <input
+                  type="datetime-local"
+                  value={followUpForm.datetime}
+                  onChange={(e) => setFollowUpForm({ ...followUpForm, datetime: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Ghi chú (tùy chọn)</label>
+                <input
+                  value={followUpForm.note}
+                  onChange={(e) => setFollowUpForm({ ...followUpForm, note: e.target.value })}
+                  placeholder="VD: Gọi lại hỏi về học phí..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setFollowUpOpen(false)}
+                  className="flex-1 border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingFollowUp || !followUpForm.datetime}
+                  className="flex-1 bg-brand-600 hover:bg-brand-500 rounded-lg py-2 text-sm text-white disabled:opacity-60 inline-flex items-center justify-center gap-1.5"
+                >
+                  {savingFollowUp && <Loader2 size={14} className="animate-spin" />}
+                  {savingFollowUp ? "Đang lưu..." : "Lưu lịch follow-up"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -19,7 +19,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Trash2,
+  Archive,
   Users,
   SearchX,
   Loader2,
@@ -34,7 +34,7 @@ import EmptyState from "../components/ui/EmptyState.jsx";
 import { LeadListSkeleton } from "../components/ui/Skeleton.jsx";
 import { useToast } from "../components/ui/ToastProvider.jsx";
 import { statusStyle, leadStatusOrder } from "../data/mockData.js";
-import { fetchLeads, createLead, deleteLead, importLeads, exportLeadsCsv } from "../services/leadService.js";
+import { fetchLeads, createLead, archiveLead, importLeads, exportLeadsCsv, fetchLeadFilterOptions } from "../services/leadService.js";
 import { validateLeadForm, hasErrors } from "../utils/validators.js";
 import { exportToCsv } from "../utils/exportCsv.js";
 import { importLeadsFromCsv } from "../utils/importCsv.js";
@@ -53,6 +53,8 @@ const sortableColumns = [
   { key: "score", label: "Điểm", type: "number" },
   { key: "cls", label: "Phân loại", type: "string" },
   { key: "assignee", label: "Người phụ trách", type: "string" },
+  { key: "lastInteractionAt", label: "Lần tương tác gần nhất", type: "date" },
+  { key: "nextFollowUpAt", label: "Ngày cần follow-up", type: "date" },
   { key: "date", label: "Ngày tạo", type: "date" },
 ];
 
@@ -67,6 +69,13 @@ export default function Leads() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("Tất cả");
   const [classFilter, setClassFilter] = useState("Tất cả");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [advFilters, setAdvFilters] = useState({
+    dateFrom: "", dateTo: "", scoreMin: "", scoreMax: "", overdueOnly: false,
+    course: "Tất cả", source: "Tất cả", assignee: "Tất cả", campaign: "Tất cả",
+  });
+  const [advFiltersDraft, setAdvFiltersDraft] = useState(advFilters);
+  const [filterOptions, setFilterOptions] = useState({ courses: [], sources: [], assignees: [], campaigns: [] });
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState(null); // 'desc' | 'asc' | null
@@ -74,10 +83,16 @@ export default function Leads() {
   const [showImport, setShowImport] = useState(false);
   const [importMsg, setImportMsg] = useState("");
   const [importing, setImporting] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deleting, setDeleting] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState(null);
+  const [archiving, setArchiving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [refreshTick, forceRefresh] = useState(0);
+
+  // GET /api/leads/filter-options — nạp 1 lần cho các lựa chọn Khóa học/Nguồn/
+  // Người phụ trách/Chiến dịch trong bộ lọc nâng cao.
+  useEffect(() => {
+    fetchLeadFilterOptions().then(setFilterOptions).catch(() => {});
+  }, [refreshTick]);
 
   // Debounce ô tìm kiếm 300ms trước khi gọi API — tránh gọi liên tục theo từng phím gõ.
   useEffect(() => {
@@ -95,7 +110,24 @@ export default function Leads() {
     let cancelled = false;
     setLoading(true);
     setListError(null);
-    fetchLeads({ query, status: statusFilter, cls: classFilter, sortKey, sortDir, page, pageSize })
+    fetchLeads({
+      query,
+      status: statusFilter,
+      cls: classFilter,
+      sortKey,
+      sortDir,
+      page,
+      pageSize,
+      dateFrom: advFilters.dateFrom || undefined,
+      dateTo: advFilters.dateTo || undefined,
+      scoreMin: advFilters.scoreMin,
+      scoreMax: advFilters.scoreMax,
+      overdueOnly: advFilters.overdueOnly,
+      course: advFilters.course,
+      source: advFilters.source,
+      assignee: advFilters.assignee,
+      campaign: advFilters.campaign,
+    })
       .then(({ items, total: t }) => {
         if (cancelled) return;
         setRows(items);
@@ -110,7 +142,7 @@ export default function Leads() {
     return () => {
       cancelled = true;
     };
-  }, [query, statusFilter, classFilter, sortKey, sortDir, page, refreshTick]);
+  }, [query, statusFilter, classFilter, sortKey, sortDir, page, refreshTick, advFilters]);
 
   const emptyForm = {
     // Bắt buộc
@@ -172,7 +204,20 @@ export default function Leads() {
   // GET /api/export/leads.csv — xuất theo đúng bộ lọc đang áp dụng (không chỉ trang hiện tại)
   const handleExport = async () => {
     try {
-      const items = await exportLeadsCsv({ query, status: statusFilter, cls: classFilter });
+      const items = await exportLeadsCsv({
+        query,
+        status: statusFilter,
+        cls: classFilter,
+        dateFrom: advFilters.dateFrom || undefined,
+        dateTo: advFilters.dateTo || undefined,
+        scoreMin: advFilters.scoreMin,
+        scoreMax: advFilters.scoreMax,
+        overdueOnly: advFilters.overdueOnly,
+        course: advFilters.course,
+        source: advFilters.source,
+        assignee: advFilters.assignee,
+        campaign: advFilters.campaign,
+      });
       exportToCsv(items, ["name", "course", "source", "status", "score", "cls", "date", "phone", "email"], "r2s-leads.csv");
     } catch (err) {
       toast.error(err.message || "Xuất CSV thất bại.");
@@ -244,18 +289,20 @@ export default function Leads() {
     }
   };
 
-  const handleDeleteLead = async () => {
-    if (!deleteTarget) return;
-    setDeleting(true);
+  // POST /api/leads/{id}/archive — Mục IX.2: không xóa cứng lead trong MVP,
+  // dùng trạng thái lưu trữ thay cho xóa.
+  const handleArchiveLead = async () => {
+    if (!archiveTarget) return;
+    setArchiving(true);
     try {
-      await deleteLead(deleteTarget.id);
-      toast.success(`Đã xóa lead "${deleteTarget.name}" thành công.`);
-      setDeleteTarget(null);
+      await archiveLead(archiveTarget.id);
+      toast.success(`Đã lưu trữ lead "${archiveTarget.name}".`);
+      setArchiveTarget(null);
       forceRefresh((n) => n + 1);
     } catch (err) {
-      toast.error(err.message || "Xóa thất bại.");
+      toast.error(err.message || "Lưu trữ thất bại.");
     } finally {
-      setDeleting(false);
+      setArchiving(false);
     }
   };
 
@@ -306,7 +353,7 @@ export default function Leads() {
           <input
             value={queryInput}
             onChange={(e) => setQueryInput(e.target.value)}
-            placeholder="Tìm theo tên, khóa học, email..."
+            placeholder="Tìm theo tên, khóa học, email, số điện thoại..."
             className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-brand-500 focus:bg-white"
           />
         </div>
@@ -329,11 +376,155 @@ export default function Leads() {
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
-          <button className="flex items-center justify-center gap-1.5 text-xs border border-slate-300 rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50 shrink-0 whitespace-nowrap">
+          <button
+            onClick={() => { setAdvFiltersDraft(advFilters); setShowAdvancedFilters((v) => !v); }}
+            className={`flex items-center justify-center gap-1.5 text-xs border rounded-lg px-3 py-2 shrink-0 whitespace-nowrap ${
+              showAdvancedFilters ? "border-brand-500 text-brand-700 bg-brand-50" : "border-slate-300 text-slate-600 hover:bg-slate-50"
+            }`}
+          >
             <ListFilter size={14} /> Bộ lọc
+            {(advFilters.dateFrom || advFilters.dateTo || advFilters.scoreMin || advFilters.scoreMax || advFilters.overdueOnly ||
+              advFilters.course !== "Tất cả" || advFilters.source !== "Tất cả" || advFilters.assignee !== "Tất cả" || advFilters.campaign !== "Tất cả") && (
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-600" />
+            )}
           </button>
         </div>
       </div>
+
+      {/* Bộ lọc nâng cao — theo khoảng thời gian, khoảng điểm, follow-up quá hạn (Mục XI.3) */}
+      {showAdvancedFilters && (
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-card space-y-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Từ ngày</label>
+              <input
+                type="date"
+                value={advFiltersDraft.dateFrom}
+                onChange={(e) => setAdvFiltersDraft({ ...advFiltersDraft, dateFrom: e.target.value })}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Đến ngày</label>
+              <input
+                type="date"
+                value={advFiltersDraft.dateTo}
+                onChange={(e) => setAdvFiltersDraft({ ...advFiltersDraft, dateTo: e.target.value })}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Điểm từ</label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={advFiltersDraft.scoreMin}
+                onChange={(e) => setAdvFiltersDraft({ ...advFiltersDraft, scoreMin: e.target.value })}
+                placeholder="0"
+                className="w-20 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Điểm đến</label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={advFiltersDraft.scoreMax}
+                onChange={(e) => setAdvFiltersDraft({ ...advFiltersDraft, scoreMax: e.target.value })}
+                placeholder="100"
+                className="w-20 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+            <label className="flex items-center gap-1.5 text-xs text-slate-600 pb-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={advFiltersDraft.overdueOnly}
+                onChange={(e) => setAdvFiltersDraft({ ...advFiltersDraft, overdueOnly: e.target.checked })}
+                className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+              />
+              Chỉ follow-up quá hạn
+            </label>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Khóa học</label>
+              <select
+                value={advFiltersDraft.course}
+                onChange={(e) => setAdvFiltersDraft({ ...advFiltersDraft, course: e.target.value })}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"
+              >
+                <option value="Tất cả">Tất cả</option>
+                {filterOptions.courses.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Nguồn</label>
+              <select
+                value={advFiltersDraft.source}
+                onChange={(e) => setAdvFiltersDraft({ ...advFiltersDraft, source: e.target.value })}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"
+              >
+                <option value="Tất cả">Tất cả</option>
+                {filterOptions.sources.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Nhân viên phụ trách</label>
+              <select
+                value={advFiltersDraft.assignee}
+                onChange={(e) => setAdvFiltersDraft({ ...advFiltersDraft, assignee: e.target.value })}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"
+              >
+                <option value="Tất cả">Tất cả</option>
+                {filterOptions.assignees.map((a) => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Chiến dịch</label>
+              <select
+                value={advFiltersDraft.campaign}
+                onChange={(e) => setAdvFiltersDraft({ ...advFiltersDraft, campaign: e.target.value })}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"
+              >
+                <option value="Tất cả">Tất cả</option>
+                {filterOptions.campaigns.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
+            <button
+              onClick={() => {
+                const cleared = {
+                  dateFrom: "", dateTo: "", scoreMin: "", scoreMax: "", overdueOnly: false,
+                  course: "Tất cả", source: "Tất cả", assignee: "Tất cả", campaign: "Tất cả",
+                };
+                setAdvFiltersDraft(cleared);
+                setAdvFilters(cleared);
+                resetPage();
+              }}
+              className="text-xs text-slate-500 hover:text-slate-700 mt-2"
+            >
+              Xóa bộ lọc
+            </button>
+            <button
+              onClick={() => { setAdvFilters(advFiltersDraft); resetPage(); }}
+              className="ml-auto mt-2 text-xs bg-brand-600 hover:bg-brand-500 text-white rounded-lg px-3 py-1.5"
+            >
+              Áp dụng
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       {loading ? (
@@ -397,19 +588,64 @@ export default function Leads() {
                   <td className="py-2.5 px-4"><Pill text={l.status} map={statusStyle} /></td>
                   <td className="py-2.5 px-4 font-medium text-slate-800">{l.score}</td>
                   <td className="py-2.5 px-4"><ClassBadge cls={l.cls} /></td>
-                  <td className="py-2.5 px-4 text-slate-500 whitespace-nowrap">{l.assignee}</td>
+                  <td className="py-2.5 px-4 text-slate-500 whitespace-nowrap">{l.assignee || "Chưa phân công"}</td>
+                  <td className="py-2.5 px-4 text-slate-400 whitespace-nowrap text-xs">
+                    {l.lastInteractionAt || "—"}
+                  </td>
+                  <td className="py-2.5 px-4 whitespace-nowrap text-xs">
+                    {l.nextFollowUpAt ? (
+                      <span className={new Date(l.nextFollowUpAt) <= new Date() ? "text-red-600 font-medium" : "text-slate-400"}>
+                        {new Date(l.nextFollowUpAt).toLocaleString("vi-VN")}
+                        {new Date(l.nextFollowUpAt) <= new Date() ? " (quá hạn)" : ""}
+                      </span>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
+                  </td>
                   <td className="py-2.5 px-4 text-slate-400 whitespace-nowrap text-xs">{l.date}</td>
                   <td className="py-2.5 px-4" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1.5">
-                      <button className="p-1.5 rounded-md text-slate-400 hover:bg-slate-100 hover:text-brand-600" title="Gọi điện"><Phone size={13} /></button>
-                      <button className="p-1.5 rounded-md text-slate-400 hover:bg-slate-100 hover:text-emerald-600" title="Gửi email"><Mail size={13} /></button>
-                      <button className="p-1.5 rounded-md text-slate-400 hover:bg-slate-100 hover:text-violet-600" title="Nhắn tin"><MessageCircle size={13} /></button>
+                      {l.phone && l.phone !== "—" ? (
+                        <a
+                          href={`tel:${l.phone.replace(/\D/g, "")}`}
+                          className="p-1.5 rounded-md text-slate-400 hover:bg-slate-100 hover:text-brand-600"
+                          title="Gọi điện"
+                        >
+                          <Phone size={13} />
+                        </a>
+                      ) : (
+                        <span className="p-1.5 text-slate-200" title="Chưa có số điện thoại"><Phone size={13} /></span>
+                      )}
+                      {l.email && l.email !== "—" ? (
+                        <a
+                          href={`mailto:${l.email}`}
+                          className="p-1.5 rounded-md text-slate-400 hover:bg-slate-100 hover:text-emerald-600"
+                          title="Gửi email"
+                        >
+                          <Mail size={13} />
+                        </a>
+                      ) : (
+                        <span className="p-1.5 text-slate-200" title="Chưa có email"><Mail size={13} /></span>
+                      )}
+                      {l.phone && l.phone !== "—" ? (
+                        <a
+                          href={`https://zalo.me/${l.phone.replace(/\D/g, "")}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1.5 rounded-md text-slate-400 hover:bg-slate-100 hover:text-violet-600"
+                          title="Nhắn Zalo"
+                        >
+                          <MessageCircle size={13} />
+                        </a>
+                      ) : (
+                        <span className="p-1.5 text-slate-200" title="Chưa có số điện thoại"><MessageCircle size={13} /></span>
+                      )}
                       <button
-                        onClick={() => setDeleteTarget(l)}
-                        className="p-1.5 rounded-md text-slate-400 hover:bg-red-50 hover:text-red-600"
-                        title="Xóa lead"
+                        onClick={() => setArchiveTarget(l)}
+                        className="p-1.5 rounded-md text-slate-400 hover:bg-amber-50 hover:text-amber-600"
+                        title="Lưu trữ lead"
                       >
-                        <Trash2 size={13} />
+                        <Archive size={13} />
                       </button>
                     </div>
                   </td>
@@ -417,7 +653,7 @@ export default function Leads() {
               ))}
               {pageRows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="p-0">
+                  <td colSpan={11} className="p-0">
                     <EmptyState
                       icon={SearchX}
                       title="Không tìm thấy kết quả phù hợp"
@@ -472,12 +708,15 @@ export default function Leads() {
       )}
 
       <ConfirmDialog
-        open={!!deleteTarget}
-        title="Xóa lead"
-        message={deleteTarget ? `Bạn có chắc chắn muốn xóa lead "${deleteTarget.name}"? Toàn bộ lịch sử chăm sóc liên quan cũng sẽ không còn hiển thị.` : ""}
-        onCancel={() => setDeleteTarget(null)}
-        onConfirm={handleDeleteLead}
-        loading={deleting}
+        open={!!archiveTarget}
+        title="Lưu trữ lead"
+        message={archiveTarget ? `Bạn có chắc chắn muốn lưu trữ lead "${archiveTarget.name}"? Lead sẽ được ẩn khỏi danh sách nhưng toàn bộ lịch sử chăm sóc và điểm số vẫn được giữ nguyên (không xóa cứng dữ liệu).` : ""}
+        confirmLabel="Lưu trữ"
+        danger={false}
+        irreversible={false}
+        onCancel={() => setArchiveTarget(null)}
+        onConfirm={handleArchiveLead}
+        loading={archiving}
       />
 
       {/* Import CSV Modal */}
