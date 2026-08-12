@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Users, Activity, Bell, Link, ExternalLink, Pencil, Trash2, X, ShieldCheck, Check, Info, ArrowUpDown, ArrowUp, ArrowDown, AlertCircle, Loader2 } from "lucide-react";
+import { Users, Activity, Bell, Link, ExternalLink, Pencil, Trash2, X, ShieldCheck, Check, Info, ArrowUpDown, ArrowUp, ArrowDown, AlertCircle, Loader2, Lock, Unlock, KeyRound } from "lucide-react";
 import Avatar from "../components/ui/Avatar.jsx";
 import Pill from "../components/ui/Pill.jsx";
 import ConfirmDialog from "../components/ui/ConfirmDialog.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 import { SkeletonBlock } from "../components/ui/Skeleton.jsx";
 import { useToast } from "../components/ui/ToastProvider.jsx";
-import { fetchUsers, updateUser, deleteUser, fetchActivityLogs } from "../services/settingsService.js";
+import { fetchUsers, updateUser, deleteUser, fetchActivityLogs, lockUser, unlockUser, resetUserPassword, isUserActive } from "../services/settingsService.js";
 
 const roleStyle = {
   Administrator: "bg-red-50 text-red-700",
@@ -66,6 +66,12 @@ export default function Settings() {
   const [matrix, setMatrix] = useState(defaultMatrix);
   const [matrixDirty, setMatrixDirty] = useState(false);
   const [refreshTick, forceRefresh] = useState(0);
+  const [lockTarget, setLockTarget] = useState(null); // { user, action: 'lock' | 'unlock' }
+  const [lockingUser, setLockingUser] = useState(false);
+  const [resetTarget, setResetTarget] = useState(null); // user đang được reset mật khẩu
+  const [resetForm, setResetForm] = useState({ newPassword: "", confirmPassword: "" });
+  const [resetErrors, setResetErrors] = useState({});
+  const [resettingPassword, setResettingPassword] = useState(false);
 
   // GET /api/users — xem services/settingsService.js
   useEffect(() => {
@@ -181,6 +187,53 @@ export default function Settings() {
     }
   };
 
+  const confirmLockToggle = async () => {
+    if (!lockTarget) return;
+    setLockingUser(true);
+    try {
+      const { user, action } = lockTarget;
+      const updated = action === "lock" ? await lockUser(user.id) : await unlockUser(user.id);
+      setUserList((list) => list.map((u) => (u.id === user.id ? updated : u)));
+      toast.success(action === "lock" ? `Đã khóa tài khoản "${user.name}".` : `Đã mở khóa tài khoản "${user.name}".`);
+      setLockTarget(null);
+    } catch (err) {
+      toast.error(err.message || "Thao tác thất bại.");
+    } finally {
+      setLockingUser(false);
+    }
+  };
+
+  const openResetPassword = (user) => {
+    setResetTarget(user);
+    setResetForm({ newPassword: "", confirmPassword: "" });
+    setResetErrors({});
+  };
+
+  const submitResetPassword = async (e) => {
+    e.preventDefault();
+    const errors = {};
+    if (!resetForm.newPassword || resetForm.newPassword.length < 6) {
+      errors.newPassword = "Mật khẩu mới cần tối thiểu 6 ký tự.";
+    }
+    if (resetForm.confirmPassword !== resetForm.newPassword) {
+      errors.confirmPassword = "Xác nhận mật khẩu không khớp.";
+    }
+    if (Object.keys(errors).length > 0) {
+      setResetErrors(errors);
+      return;
+    }
+    setResettingPassword(true);
+    try {
+      await resetUserPassword(resetTarget.id, resetForm.newPassword);
+      toast.success(`Đã đặt lại mật khẩu cho "${resetTarget.name}".`);
+      setResetTarget(null);
+    } catch (err) {
+      toast.error(err.message || "Đặt lại mật khẩu thất bại.");
+    } finally {
+      setResettingPassword(false);
+    }
+  };
+
   const togglePermission = (module, role) => {
     setMatrix((prev) => ({
       ...prev,
@@ -265,9 +318,15 @@ export default function Settings() {
                     <td className="py-3 px-4"><Pill text={u.role} map={roleStyle} /></td>
                     <td className="py-3 px-4 text-slate-500">{u.email}</td>
                     <td className="py-3 px-4">
-                      <span className="text-xs text-emerald-600 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500" /> {u.status}
-                      </span>
+                      {isUserActive(u.status) ? (
+                        <span className="text-xs text-emerald-600 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500" /> Hoạt động
+                        </span>
+                      ) : (
+                        <span className="text-xs text-red-600 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-red-500" /> Đã khóa
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center justify-end gap-1.5">
@@ -278,6 +337,31 @@ export default function Settings() {
                         >
                           <Pencil size={16} />
                         </button>
+                        <button
+                          onClick={() => openResetPassword(u)}
+                          title="Đặt lại mật khẩu"
+                          className="p-1.5 rounded-md text-slate-500 hover:bg-violet-50 hover:text-violet-600 transition-colors"
+                        >
+                          <KeyRound size={16} />
+                        </button>
+                        {isUserActive(u.status) ? (
+                          <button
+                            onClick={() => setLockTarget({ user: u, action: "lock" })}
+                            title={u.role === "Administrator" ? "Không thể khóa tài khoản Admin" : "Khóa tài khoản"}
+                            disabled={u.role === "Administrator"}
+                            className="p-1.5 rounded-md text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500"
+                          >
+                            <Lock size={16} />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setLockTarget({ user: u, action: "unlock" })}
+                            title="Mở khóa tài khoản"
+                            className="p-1.5 rounded-md text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"
+                          >
+                            <Unlock size={16} />
+                          </button>
+                        )}
                         <button
                           onClick={() => setDeleteTarget(u)}
                           title={u.role === "Administrator" ? "Không thể xóa tài khoản Admin" : "Xóa"}
@@ -518,6 +602,82 @@ export default function Settings() {
         onConfirm={handleDeleteUser}
         loading={deletingUser}
       />
+
+      <ConfirmDialog
+        open={!!lockTarget}
+        title={lockTarget?.action === "lock" ? "Khóa tài khoản" : "Mở khóa tài khoản"}
+        message={
+          lockTarget
+            ? lockTarget.action === "lock"
+              ? `Bạn có chắc chắn muốn khóa tài khoản "${lockTarget.user.name}"? Người dùng sẽ không thể đăng nhập cho tới khi được mở khóa lại.`
+              : `Mở khóa tài khoản "${lockTarget.user.name}"? Người dùng sẽ có thể đăng nhập lại bình thường.`
+            : ""
+        }
+        onCancel={() => setLockTarget(null)}
+        onConfirm={confirmLockToggle}
+        loading={lockingUser}
+      />
+
+      {resetTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-sm p-6 shadow-elevated">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-slate-900">Đặt lại mật khẩu</h3>
+              <button onClick={() => setResetTarget(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 mb-4">
+              Đặt mật khẩu mới cho tài khoản <span className="font-medium text-slate-700">{resetTarget.name}</span> ({resetTarget.email}).
+            </p>
+            <form onSubmit={submitResetPassword} className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Mật khẩu mới *</label>
+                <input
+                  type="password"
+                  value={resetForm.newPassword}
+                  onChange={(e) => setResetForm({ ...resetForm, newPassword: e.target.value })}
+                  placeholder="Tối thiểu 6 ký tự"
+                  className={`w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+                    resetErrors.newPassword ? "border-red-300" : "border-slate-200"
+                  }`}
+                />
+                {resetErrors.newPassword && <p className="text-[11px] text-red-600 mt-1">{resetErrors.newPassword}</p>}
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Xác nhận mật khẩu mới *</label>
+                <input
+                  type="password"
+                  value={resetForm.confirmPassword}
+                  onChange={(e) => setResetForm({ ...resetForm, confirmPassword: e.target.value })}
+                  placeholder="Nhập lại mật khẩu mới"
+                  className={`w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+                    resetErrors.confirmPassword ? "border-red-300" : "border-slate-200"
+                  }`}
+                />
+                {resetErrors.confirmPassword && <p className="text-[11px] text-red-600 mt-1">{resetErrors.confirmPassword}</p>}
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setResetTarget(null)}
+                  className="flex-1 border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={resettingPassword}
+                  className="flex-1 bg-brand-600 hover:bg-brand-500 rounded-lg py-2 text-sm text-white disabled:opacity-60 inline-flex items-center justify-center gap-1.5"
+                >
+                  {resettingPassword && <Loader2 size={14} className="animate-spin" />}
+                  {resettingPassword ? "Đang lưu..." : "Đặt lại mật khẩu"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

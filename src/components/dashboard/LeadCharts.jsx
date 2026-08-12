@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   AreaChart,
   Area,
@@ -15,19 +14,6 @@ import ChartCard from "../ui/ChartCard.jsx";
 import SearchableSelect from "../ui/SearchableSelect.jsx";
 import { SkeletonBlock } from "../ui/Skeleton.jsx";
 
-// Danh sách mặc định — có thể override bằng props courseOptions / statusOptions
-// nếu Dashboard.jsx muốn truyền danh sách lấy từ API (/api/courses, /api/lead-statuses).
-const DEFAULT_COURSES = ["Java Backend", "ReactJS", "Flutter", "Business Analyst"];
-const DEFAULT_STATUSES = [
-  "Lead mới",
-  "Đã liên hệ",
-  "Đang tư vấn",
-  "Đang cân nhắc",
-  "Đã đặt cọc",
-  "Đã đăng ký",
-  "Không phù hợp",
-];
-
 const tooltipStyle = {
   background: "#ffffff",
   border: "1px solid #e2e8f0",
@@ -38,31 +24,24 @@ const tooltipStyle = {
   padding: "8px 12px",
 };
 
-// Dữ liệu (leadsByDay, classification) và trạng thái loading giờ được
-// Dashboard.jsx tải theo dropdown khoảng thời gian dùng chung, truyền
-// xuống qua props — component này chỉ còn lo phần hiển thị biểu đồ.
+// Component này là controlled: giá trị lọc (courseFilter/statusFilter) và danh
+// sách lựa chọn (courseOptions/statusOptions) do Dashboard.jsx truyền xuống,
+// component chỉ hiển thị + gọi onChange đẩy giá trị lên. loading = đang tải
+// theo khoảng thời gian (skeleton toàn khối); chartLoading = chỉ biểu đồ
+// "Lead theo ngày" đang tải lại theo bộ lọc (skeleton riêng cho khung biểu đồ).
 export default function LeadCharts({
   leadsByDay,
   classification,
   loading,
-  courseOptions = DEFAULT_COURSES,
-  statusOptions = DEFAULT_STATUSES,
-  onCourseFilterChange,
-  onStatusFilterChange,
+  chartLoading = false,
+  courseOptions,
+  statusOptions,
+  courseFilter,
+  statusFilter,
+  onCourseChange,
+  onStatusChange,
 }) {
   const totalClass = classification.reduce((a, c) => a + c.value, 0);
-  const [courseFilter, setCourseFilter] = useState(null);
-  const [statusFilter, setStatusFilter] = useState(null);
-
-  function handleCourseChange(v) {
-    setCourseFilter(v);
-    onCourseFilterChange?.(v);
-  }
-
-  function handleStatusChange(v) {
-    setStatusFilter(v);
-    onStatusFilterChange?.(v);
-  }
 
   if (loading) {
     return (
@@ -88,17 +67,20 @@ export default function LeadCharts({
               label="Khóa học"
               options={courseOptions}
               value={courseFilter}
-              onChange={handleCourseChange}
+              onChange={onCourseChange}
             />
             <SearchableSelect
               label="Trạng thái"
               options={statusOptions}
               value={statusFilter}
-              onChange={handleStatusChange}
+              onChange={onStatusChange}
             />
           </div>
         }
       >
+        {chartLoading ? (
+          <SkeletonBlock className="w-full h-[240px]" />
+        ) : (
         <ResponsiveContainer width="100%" height={240}>
           <AreaChart data={leadsByDay} margin={{ left: -20, right: 10, top: 10 }}>
             <defs>
@@ -133,6 +115,7 @@ export default function LeadCharts({
             />
           </AreaChart>
         </ResponsiveContainer>
+        )}
       </ChartCard>
 
       <ChartCard title="Phân loại lead">

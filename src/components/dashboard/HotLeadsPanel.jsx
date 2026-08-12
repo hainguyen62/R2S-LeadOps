@@ -28,7 +28,7 @@ const MODES = [
 ];
 
 const emptyCopy = {
-  priority: { title: "Chưa có lead cần ưu tiên", description: "Danh sách sẽ hiện khi có lead nóng hoặc ấm." },
+  priority: { title: "Chưa có lead cần xử lý ngay", description: "Danh sách sẽ hiện khi có Lead nóng (70–100đ) chưa liên hệ." },
   unassigned: { title: "Đã phân công hết", description: "Không có lead nào đang chờ phân công." },
   followup: { title: "Không có follow-up đến hạn", description: "Danh sách sẽ hiện khi có lịch follow-up đến hạn hoặc quá hạn." },
 };

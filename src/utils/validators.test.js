@@ -54,24 +54,28 @@ describe("validateLeadForm", () => {
     expect(errors.name).toBeDefined();
     expect(errors.course).toBeDefined();
     expect(errors.source).toBeDefined();
-    expect(errors.contact).toBeDefined();
+    expect(errors.phone).toBeDefined();
+    expect(errors.email).toBeDefined();
   });
 
-  it("báo lỗi contact khi thiếu cả phone lẫn email", () => {
-    const errors = validateLeadForm({ name: "A", course: "X", source: "Y" });
-    expect(errors.contact).toBeDefined();
-    expect(errors.phone).toBeUndefined();
+  it("báo lỗi khi chỉ thiếu một trong hai (phone hoặc email) — cả hai đều bắt buộc", () => {
+    const missingEmail = validateLeadForm({ name: "A", course: "X", source: "Y", phone: "0901234567" });
+    expect(missingEmail.email).toBeDefined();
+    expect(missingEmail.phone).toBeUndefined();
+
+    const missingPhone = validateLeadForm({ name: "A", course: "X", source: "Y", email: "a@b.com" });
+    expect(missingPhone.phone).toBeDefined();
+    expect(missingPhone.email).toBeUndefined();
   });
 
   it("báo lỗi định dạng khi phone/email sai, dù đã điền", () => {
     const errors = validateLeadForm({ name: "A", course: "X", source: "Y", phone: "123", email: "notanemail" });
     expect(errors.phone).toBeDefined();
     expect(errors.email).toBeDefined();
-    expect(errors.contact).toBeUndefined();
   });
 
-  it("hợp lệ khi có đủ trường bắt buộc và ít nhất 1 kênh liên hệ đúng định dạng", () => {
-    const errors = validateLeadForm({ name: "Nguyễn Văn A", course: "ReactJS", source: "Facebook Ads", phone: "0901234567" });
+  it("hợp lệ khi có đủ trường bắt buộc, gồm cả phone lẫn email đúng định dạng", () => {
+    const errors = validateLeadForm({ name: "Nguyễn Văn A", course: "ReactJS", source: "Facebook Ads", phone: "0901234567", email: "a@b.com" });
     expect(hasErrors(errors)).toBe(false);
   });
 });

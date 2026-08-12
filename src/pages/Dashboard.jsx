@@ -11,7 +11,10 @@ import LeadDetailModal from "../components/dashboard/LeadDetailModal.jsx";
 import {
   fetchDashboardOverview,
   fetchDashboardByRange,
+  fetchLeadsByDayRange,
   DASHBOARD_RANGE_OPTIONS,
+  DASHBOARD_COURSE_OPTIONS,
+  DASHBOARD_STATUS_OPTIONS,
 } from "../services/dashboardService.js";
 import { fetchLeadById } from "../services/leadService.js";
 
@@ -39,6 +42,15 @@ export default function Dashboard() {
   const [rangeData, setRangeData] = useState(null);
   const [loadingRange, setLoadingRange] = useState(true);
   const [rangeError, setRangeError] = useState(null);
+
+  // Bộ lọc riêng cho biểu đồ "Lead theo ngày" — 2 dropdown Khóa học / Trạng thái.
+  // Chỉ tải lại chuỗi theo ngày khi có lọc, không đụng tới donut/nguồn/phễu/KPI.
+  const [courseFilter, setCourseFilter] = useState(null);
+  const [statusFilter, setStatusFilter] = useState(null);
+  const [filteredByDay, setFilteredByDay] = useState([]);
+  const [loadingChart, setLoadingChart] = useState(false);
+
+  const hasChartFilter = Boolean(courseFilter || statusFilter);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,6 +89,28 @@ export default function Dashboard() {
     };
   }, [days, retryTick]);
 
+  // GET /api/dashboard/leads-by-day?range={days}&course=&status= — tải lại chuỗi
+  // "Lead theo ngày" mỗi khi đổi khóa học / trạng thái. Không lọc thì dùng lại
+  // dữ liệu sẵn có trong rangeData nên không cần gọi API.
+  useEffect(() => {
+    if (!hasChartFilter) {
+      setFilteredByDay([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingChart(true);
+    fetchLeadsByDayRange(days, { course: courseFilter, status: statusFilter })
+      .then((data) => {
+        if (!cancelled) setFilteredByDay(data);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingChart(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [days, courseFilter, statusFilter, hasChartFilter]);
+
   // Khi chọn 1 hot lead, tải chi tiết lead qua leadService để hiện modal
   useEffect(() => {
     if (!selectedId) {
@@ -111,6 +145,10 @@ export default function Dashboard() {
     ...s,
     label: s.key === "new" && days === 1 ? "Lead mới hôm nay" : `${s.label} (${rangeLabel(days)})`,
   }));
+
+  // Chuỗi "Lead theo ngày": đang lọc khóa học/trạng thái thì dùng dữ liệu đã
+  // lọc (filteredByDay), ngược lại dùng dữ liệu theo khoảng thời gian.
+  const leadsByDay = hasChartFilter ? filteredByDay : rangeData?.leadsByDay || [];
 
   return (
     <div className="space-y-6">
@@ -162,16 +200,25 @@ export default function Dashboard() {
       {/* Row: line chart + donut */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <LeadCharts
-          leadsByDay={rangeData?.leadsByDay || []}
+          leadsByDay={leadsByDay}
           classification={rangeData?.classification || []}
           loading={loadingRange}
+          chartLoading={loadingChart}
+          courseOptions={DASHBOARD_COURSE_OPTIONS}
+          statusOptions={DASHBOARD_STATUS_OPTIONS}
+          courseFilter={courseFilter}
+          statusFilter={statusFilter}
+          onCourseChange={setCourseFilter}
+          onStatusChange={setStatusFilter}
         />
       </div>
 
-      {/* Row: bar chart + funnel + lead cần xử lý ngay */}
+      {/* Row: biểu đồ (Nguồn lead / Trạng thái lead — chọn qua popup trong
+          card) + phễu + lead cần xử lý ngay */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <SourceFunnel
           sources={rangeData?.sources || []}
+          statusBreakdown={rangeData?.statusBreakdown || []}
           funnel={rangeData?.funnel || []}
           loading={loadingRange}
         />

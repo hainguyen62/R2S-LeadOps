@@ -47,6 +47,7 @@ const pageSize = 6;
 //   type -> loại dữ liệu để so sánh ('string' | 'number' | 'date')
 const sortableColumns = [
   { key: "name", label: "Họ tên", type: "string" },
+  { key: "phone", label: "Số điện thoại", type: "string" },
   { key: "course", label: "Khóa học", type: "string" },
   { key: "source", label: "Nguồn", type: "string" },
   { key: "status", label: "Trạng thái", type: "string" },
@@ -583,6 +584,9 @@ export default function Leads() {
                       </div>
                     </div>
                   </td>
+                  <td className="py-2.5 px-4 text-slate-500 whitespace-nowrap">
+                    {l.phone && l.phone !== "—" ? l.phone : <span className="text-slate-300">—</span>}
+                  </td>
                   <td className="py-2.5 px-4 text-slate-500 whitespace-nowrap">{l.course}</td>
                   <td className="py-2.5 px-4 whitespace-nowrap"><SourceBadge source={l.source} /></td>
                   <td className="py-2.5 px-4"><Pill text={l.status} map={statusStyle} /></td>
@@ -653,7 +657,7 @@ export default function Leads() {
               ))}
               {pageRows.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="p-0">
+                  <td colSpan={12} className="p-0">
                     <EmptyState
                       icon={SearchX}
                       title="Không tìm thấy kết quả phù hợp"
@@ -846,7 +850,7 @@ export default function Leads() {
                     onChange={(e) => setForm({ ...form, phone: e.target.value })}
                     placeholder="0900 000 000"
                     className={`w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 ${
-                      formErrors.contact || formErrors.phone ? "border-red-300" : "border-slate-200"
+                      formErrors.phone ? "border-red-300" : "border-slate-200"
                     }`}
                   />
                   {formErrors.phone && <p className="text-[11px] text-red-600 mt-1">{formErrors.phone}</p>}
@@ -858,13 +862,13 @@ export default function Leads() {
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
                     placeholder="email@gmail.com"
                     className={`w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 ${
-                      formErrors.contact || formErrors.email ? "border-red-300" : "border-slate-200"
+                      formErrors.email ? "border-red-300" : "border-slate-200"
                     }`}
                   />
                   {formErrors.email && <p className="text-[11px] text-red-600 mt-1">{formErrors.email}</p>}
                 </div>
               </div>
-              <p className="text-[11px] text-slate-400 -mt-2">* Cần điền ít nhất một trong hai: số điện thoại hoặc email.</p>
+              <p className="text-[11px] text-slate-400 -mt-2">* Bắt buộc nhập cả số điện thoại và email.</p>
 
               {/* ---- Thông tin mở rộng (tùy chọn) ---- */}
               <button

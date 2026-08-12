@@ -16,6 +16,31 @@ const formatShortDate = (iso) => {
   return `${d}/${m}`;
 };
 
+/**
+ * Suy ra trạng thái hiển thị của chiến dịch dựa trên ngày bắt đầu/kết thúc:
+ *   - Chưa tới ngày bắt đầu           -> "Sắp diễn ra"
+ *   - Đã qua ngày kết thúc            -> "Kết thúc"
+ *   - Còn lại (đang trong khoảng)     -> "Đang chạy"
+ * Nếu thiếu ngày bắt đầu/kết thúc hợp lệ thì fallback về c.status gốc.
+ */
+const getCampaignDisplayStatus = (c) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const start = c.start && c.start !== "—" ? new Date(c.start) : null;
+  const end = c.end && c.end !== "—" ? new Date(c.end) : null;
+
+  if (start && !isNaN(start) && today < start) return "Sắp diễn ra";
+  if (end && !isNaN(end) && today > end) return "Kết thúc";
+  if (start && !isNaN(start)) return "Đang chạy";
+  return c.status || "—";
+};
+
+const campaignStatusStyle = {
+  "Sắp diễn ra": "bg-amber-50 text-amber-700",
+  "Đang chạy": "bg-emerald-50 text-emerald-700",
+  "Kết thúc": "bg-slate-100 text-slate-500",
+};
+
 export default function Campaigns() {
   const navigate = useNavigate();
   const toast = useToast();
@@ -154,12 +179,10 @@ export default function Campaigns() {
                 </div>
                 <span
                   className={`text-[11px] px-2.5 py-1 rounded-full font-medium ${
-                    c.status === "Đang chạy"
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "bg-slate-100 text-slate-500"
+                    campaignStatusStyle[getCampaignDisplayStatus(c)] || "bg-slate-100 text-slate-500"
                   }`}
                 >
-                  {c.status}
+                  {getCampaignDisplayStatus(c)}
                 </span>
               </div>
               <h3 className="font-medium text-sm mb-1 text-slate-900 flex items-center gap-1">
@@ -167,7 +190,7 @@ export default function Campaigns() {
                 <ChevronRight size={14} className="text-slate-300 group-hover:text-brand-500 group-hover:translate-x-0.5 transition-all" />
               </h3>
               <p className="text-xs text-slate-500 mb-4">Nguồn: {c.source}</p>
-              <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="grid grid-cols-2 gap-2 text-center mb-2">
                 <div className="bg-slate-50 rounded-lg py-2">
                   <p className="text-lg font-semibold text-slate-900">{c.leads}</p>
                   <p className="text-[10px] text-slate-500">Leads</p>
@@ -176,9 +199,15 @@ export default function Campaigns() {
                   <p className="text-lg font-semibold text-slate-900">{c.budget}</p>
                   <p className="text-[10px] text-slate-500">Ngân sách</p>
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-center">
                 <div className="bg-slate-50 rounded-lg py-2">
                   <p className="text-sm font-semibold text-slate-900">{formatShortDate(c.start)}</p>
                   <p className="text-[10px] text-slate-500">Bắt đầu</p>
+                </div>
+                <div className="bg-slate-50 rounded-lg py-2">
+                  <p className="text-sm font-semibold text-slate-900">{formatShortDate(c.end)}</p>
+                  <p className="text-[10px] text-slate-500">Kết thúc</p>
                 </div>
               </div>
             </button>
@@ -249,6 +278,16 @@ export default function Campaigns() {
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
                   />
                 </div>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Ngày kết thúc</label>
+                <input
+                  type="date"
+                  value={form.end}
+                  onChange={(e) => setForm({ ...form, end: e.target.value })}
+                  min={form.start || undefined}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+                />
               </div>
               <div className="flex gap-2 pt-2">
                 <button

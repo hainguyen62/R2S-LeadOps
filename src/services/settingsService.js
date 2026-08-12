@@ -10,21 +10,49 @@ function clone(obj) {
   return typeof structuredClone === "function" ? structuredClone(obj) : JSON.parse(JSON.stringify(obj));
 }
 
-/** GET /api/users (tương ứng nhóm "Quản lý tài khoản người dùng" ở Module 1) */
+/** GET /admin/users — Filter theo role/status (đúng theo APIs_check_list.xlsx) */
 export async function fetchUsers() {
-  if (!USE_MOCK) return apiFetch("/users");
+  if (!USE_MOCK) return apiFetch("/admin/users");
   await mockDelay(300);
   return clone(mockUsers);
 }
 
-/** PATCH /api/users/{id}/status — khóa/mở tài khoản */
-export async function toggleUserStatus(id) {
-  if (!USE_MOCK) return apiFetch(`/users/${id}/status`, { method: "PATCH" });
+/** PUT /admin/users/{userId}/lock — đổi status thành LOCKED, user không login được */
+export async function lockUser(id) {
+  if (!USE_MOCK) return apiFetch(`/admin/users/${id}/lock`, { method: "PUT" });
   await mockDelay();
   const idx = mockUsers.findIndex((u) => u.id === id);
   if (idx === -1) throw new ApiError("Không tìm thấy người dùng.", { status: 404 });
-  mockUsers[idx].status = mockUsers[idx].status === "Hoạt động" ? "Đã khóa" : "Hoạt động";
+  mockUsers[idx].status = "Đã khóa";
   return clone(mockUsers[idx]);
+}
+
+/** PUT /admin/users/{userId}/unlock — trả lại ACTIVE */
+export async function unlockUser(id) {
+  if (!USE_MOCK) return apiFetch(`/admin/users/${id}/unlock`, { method: "PUT" });
+  await mockDelay();
+  const idx = mockUsers.findIndex((u) => u.id === id);
+  if (idx === -1) throw new ApiError("Không tìm thấy người dùng.", { status: 404 });
+  mockUsers[idx].status = "Hoạt động";
+  return clone(mockUsers[idx]);
+}
+
+/** PUT /admin/users/{userId}/reset-password — Admin đặt mật khẩu mới cho user */
+export async function resetUserPassword(id, newPassword) {
+  if (!USE_MOCK) return apiFetch(`/admin/users/${id}/reset-password`, { method: "PUT", body: { newPassword } });
+  await mockDelay();
+  const idx = mockUsers.findIndex((u) => u.id === id);
+  if (idx === -1) throw new ApiError("Không tìm thấy người dùng.", { status: 404 });
+  if (!newPassword || String(newPassword).length < 6) {
+    throw new ApiError("Mật khẩu mới cần tối thiểu 6 ký tự.", { status: 400, fieldErrors: { newPassword: "Mật khẩu mới cần tối thiểu 6 ký tự." } });
+  }
+  return { success: true };
+}
+
+/** Trạng thái tài khoản đang hoạt động hay đã bị khóa — chuẩn hóa vì Backend có thể trả "ACTIVE"/"LOCKED". */
+export function isUserActive(status) {
+  const s = String(status || "").trim().toLowerCase();
+  return s === "hoạt động" || s === "active";
 }
 
 /** Cập nhật thông tin tài khoản (họ tên/email/vai trò) — nhóm "Tạo tài khoản/Phân vai trò" ở Module 1. */

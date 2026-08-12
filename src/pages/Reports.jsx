@@ -11,17 +11,15 @@ import {
   Line,
   Legend,
 } from "recharts";
-import { Download, AlertCircle } from "lucide-react";
+import { Download, AlertCircle, CalendarRange } from "lucide-react";
 import ChartCard from "../components/ui/ChartCard.jsx";
 import FunnelBody from "../components/dashboard/FunnelBody.jsx";
 import { SkeletonBlock } from "../components/ui/Skeleton.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 import {
-  fetchLeadsByDay,
-  fetchLeadsBySource,
-  fetchLeadsByStatusClassification,
-  fetchConversionFunnel,
+  fetchDashboardByRange,
   fetchConversionTrend,
+  DASHBOARD_RANGE_OPTIONS,
 } from "../services/dashboardService.js";
 import { exportToCsv } from "../utils/exportCsv.js";
 
@@ -43,23 +41,40 @@ export default function Reports() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Tải toàn bộ dữ liệu báo cáo qua dashboardService — xem services/dashboardService.js
+  // Dropdown khoảng thời gian dùng chung (giống Dashboard.jsx) — áp dụng cho
+  // "Lead theo ngày", "Nguồn lead", "Phân loại lead", "Phễu chuyển đổi".
+  // Riêng "Xu hướng chuyển đổi" là báo cáo theo tháng, không phụ thuộc mốc
+  // ngày/tuần nên giữ nguyên không lọc.
+  const [days, setDays] = useState(7);
+
+  // Tải "Xu hướng chuyển đổi" (không phụ thuộc range) — chỉ 1 lần.
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      fetchLeadsByDay(),
-      fetchLeadsBySource(),
-      fetchLeadsByStatusClassification(),
-      fetchConversionFunnel(),
-      fetchConversionTrend(),
-    ])
-      .then(([byDay, src, cls, fn, trend]) => {
+    fetchConversionTrend()
+      .then((trend) => {
+        if (!cancelled) setConversionTrend(trend);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || "Không thể tải báo cáo.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Tải phần còn lại theo khoảng thời gian đã chọn — dùng chung
+  // fetchDashboardByRange(days) đã có sẵn (đúng dữ liệu, tỉ lệ khớp Dashboard).
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetchDashboardByRange(days)
+      .then((data) => {
         if (cancelled) return;
-        setLeadsByDay(byDay);
-        setSources(src);
-        setClassification(cls);
-        setFunnel(fn);
-        setConversionTrend(trend);
+        setLeadsByDay(data.leadsByDay || []);
+        setSources(data.sources || []);
+        setClassification(data.classification || []);
+        setFunnel(data.funnel || []);
       })
       .catch((err) => {
         if (!cancelled) setError(err.message || "Không thể tải báo cáo.");
@@ -70,7 +85,7 @@ export default function Reports() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [days]);
 
   const classificationTotal = classification.reduce((a, c) => a + c.value, 0) || 1;
 
@@ -97,18 +112,32 @@ export default function Reports() {
           <h2 className="text-lg font-semibold text-slate-900">Báo cáo</h2>
           <p className="text-sm text-slate-500">Đo lường hiệu quả Marketing và tỷ lệ chuyển đổi</p>
         </div>
-        <button
-          onClick={() =>
-            exportToCsv(
-              leadsByDay,
-              ["day", "value"],
-              "r2s-leads-by-day.csv"
-            )
-          }
-          className="flex items-center gap-1.5 text-xs border border-slate-300 rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50"
-        >
-          <Download size={14} /> Xuất báo cáo
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <label className="flex items-center gap-2 text-xs text-gray-600 border border-gray-200 rounded-lg px-2.5 py-2 bg-white">
+            <CalendarRange size={14} className="text-slate-400 shrink-0" />
+            <select
+              value={days}
+              onChange={(e) => setDays(e.target.value === "all" ? "all" : Number(e.target.value))}
+              className="bg-transparent focus:outline-none cursor-pointer"
+            >
+              {DASHBOARD_RANGE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            onClick={() =>
+              exportToCsv(
+                leadsByDay,
+                ["day", "value"],
+                "r2s-leads-by-day.csv"
+              )
+            }
+            className="flex items-center gap-1.5 text-xs border border-slate-300 rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50"
+          >
+            <Download size={14} /> Xuất báo cáo
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

@@ -10,8 +10,9 @@ import {
   sources,
   funnel,
   leads as mockLeads,
+  leadStatusOrder,
 } from "../data/mockData.js";
-import { priorityTier } from "../utils/leadScoring.js";
+import { priorityTier, classify } from "../utils/leadScoring.js";
 
 function clone(obj) {
   return typeof structuredClone === "function" ? structuredClone(obj) : JSON.parse(JSON.stringify(obj));
@@ -31,15 +32,27 @@ export async function fetchLeadsByDay() {
   return clone(leadsByDay);
 }
 
-export async function fetchLeadsByStatusClassification() {
-  if (!USE_MOCK) return apiFetch("/dashboard/leads-by-status");
+/**
+ * GET /dashboard/lead-status — số lượng lead theo TỪNG TRẠNG THÁI (Lead mới,
+ * Đã liên hệ, Đang tư vấn...), đúng mô tả trong APIs_check_list.xlsx:
+ * "Trả lại thông tin số lượng lead theo trạng thái".
+ *
+ * Lưu ý: đây KHÔNG phải là phân loại Nóng/Ấm/Lạnh (xem `classification` bên
+ * dưới) — trước đây hàm này bị đặt tên `fetchLeadsByStatusClassification` và
+ * trả nhầm dữ liệu classification, gây nhầm lẫn giữa 2 khái niệm khác nhau.
+ */
+export async function fetchLeadsByStatus() {
+  if (!USE_MOCK) return apiFetch("/dashboard/lead-status");
   await mockDelay(300);
-  return clone(classification);
+  return leadStatusOrder.map((name) => ({
+    name,
+    value: mockLeads.filter((l) => l.status === name).length,
+  }));
 }
 
-/** GET /api/dashboard/leads-by-source */
+/** GET /dashboard/lead-resource */
 export async function fetchLeadsBySource() {
-  if (!USE_MOCK) return apiFetch("/dashboard/leads-by-source");
+  if (!USE_MOCK) return apiFetch("/dashboard/lead-resource");
   await mockDelay(300);
   return clone(sources);
 }
@@ -77,6 +90,49 @@ export const DASHBOARD_RANGE_OPTIONS = [
   { value: 30, label: "30 ngày qua" },
   { value: "all", label: "Tất cả" },
 ];
+
+/* ------------------------------------------------------------------------
+ * LỌC "LEAD THEO NGÀY" THEO KHÓA HỌC / TRẠNG THÁI (2 dropdown trên biểu đồ)
+ * ------------------------------------------------------------------------
+ * - DASHBOARD_COURSE_OPTIONS: rút từ chính dữ liệu lead hiện có (giống cách
+ *   fetchLeadFilterOptions của leadService) để mỗi lựa chọn luôn có dữ liệu.
+ * - DASHBOARD_STATUS_OPTIONS: dùng đúng luồng trạng thái chính thức
+ *   (leadStatusOrder) thay vì hardcode, tránh lệch với các màn hình khác.
+ * - fetchLeadsByDayRange: mô phỏng GET /api/dashboard/leads-by-day?range=
+ *   {days}&course=&status=. Khi có Back-end thật, chỉ cần thay thân hàm bằng
+ *   lệnh gọi API với các tham số trên — chữ ký đã khớp sẵn.
+ * ------------------------------------------------------------------------ */
+export const DASHBOARD_COURSE_OPTIONS = [...new Set(mockLeads.map((l) => l.course).filter(Boolean))].sort();
+export const DASHBOARD_STATUS_OPTIONS = leadStatusOrder;
+
+// Tỉ lệ lead trong mock khớp với bộ lọc khóa học/trạng thái (0..1). Không lọc
+// (null/"") thì trả 1 — biểu đồ giữ nguyên toàn bộ dữ liệu.
+function filterShare({ course, status } = {}) {
+  if (!course && !status) return 1;
+  const total = mockLeads.length || 1;
+  const matched = mockLeads.filter(
+    (l) => (!course || l.course === course) && (!status || l.status === status)
+  ).length;
+  return matched / total;
+}
+
+/**
+ * GET /api/dashboard/leads-by-day?range={days}&course=&status= — chuỗi dữ liệu
+ * cho biểu đồ "Lead theo ngày", đã lọc theo khóa học / trạng thái từ 2 dropdown
+ * trên biểu đồ. Không lọc thì trả về cùng chuỗi cơ sở với fetchDashboardByRange
+ * (đã nhân tỉ lệ 1:1) để số liệu lọc/tất cả luôn khớp nhau.
+ */
+export async function fetchLeadsByDayRange(days, filters = {}) {
+  if (!USE_MOCK) {
+    return apiFetch("/dashboard/leads-by-day", {
+      params: { range: days, course: filters.course || undefined, status: filters.status || undefined },
+    });
+  }
+  await mockDelay(250);
+  const share = filterShare(filters);
+  const base = days === "all" ? buildDailySeries(30) : buildDailySeries(days);
+  return base.map((d) => ({ day: d.day, value: Math.max(0, Math.round(d.value * share)) }));
+}
 
 function hashKey(key) {
   let h = 0;
@@ -131,6 +187,10 @@ export async function fetchDashboardByRange(days) {
     const registeredTotal = funnelAll[funnelAll.length - 1].value;
     const depositedTotal = funnelAll[funnelAll.length - 2].value; // "Đã đặt cọc" — áp chót trong phễu
     const hotTotal = classification.find((c) => c.name === "Nóng").value;
+    const statusBreakdownAll = leadStatusOrder.map((name) => ({
+      name,
+      value: mockLeads.filter((l) => l.status === name).length,
+    }));
 
     // Biểu đồ "Lead theo ngày" chưa có lịch sử đầy đủ trong mock — hiển thị
     // xu hướng 30 ngày gần nhất nhưng CO GIÃN lại để tổng khớp đúng với
@@ -144,6 +204,7 @@ export async function fetchDashboardByRange(days) {
       leadsByDay: leadsByDayAll,
       classification: classification.map((c) => ({ ...c })),
       sources: sources.map((s) => ({ ...s })),
+      statusBreakdown: statusBreakdownAll,
       funnel: funnelAll,
       statsRange: [
         { key: "new", label: "Lead mới", value: currentTotal, sub: "Tất cả thời gian", icon: "UserPlus", tint: "bg-emerald-500" },
@@ -194,12 +255,26 @@ export async function fetchDashboardByRange(days) {
   const depositedRatio = funnel[funnel.length - 2].value / funnel[0].value;
   const depositedPrevTotal = Math.round(prevTotal * depositedRatio);
 
+  // Tỉ lệ trạng thái lấy từ baseline mockData (đếm theo l.status hiện có),
+  // phân bổ lại theo tổng lead mới trong kỳ đã chọn — cùng cơ chế với
+  // classification/sources phía trên.
+  const statusBaseline = leadStatusOrder.map((name) => ({
+    name,
+    value: mockLeads.filter((l) => l.status === name).length,
+  }));
+  const statusTotal = sum(statusBaseline) || 1;
+  const statusForRange = statusBaseline.map((s) => ({
+    ...s,
+    value: Math.round((currentTotal * s.value) / statusTotal),
+  }));
+
   const compareLabel = days === 1 ? "hôm qua" : `${days} ngày trước`;
 
   return clone({
     leadsByDay: currentSeries,
     classification: classForRange,
     sources: sourcesForRange,
+    statusBreakdown: statusForRange,
     funnel: funnelForRange,
     statsRange: [
       { key: "new", label: "Lead mới", value: currentTotal, sub: pctChange(currentTotal, prevTotal, compareLabel), icon: "UserPlus", tint: "bg-emerald-500" },
@@ -210,12 +285,27 @@ export async function fetchDashboardByRange(days) {
   });
 }
 
-/** GET /api/dashboard/hot-leads — danh sách lead cần ưu tiên xử lý ngay */
+/**
+ * GET /dashboard/top-lead — "Lead cần xử lý ngay".
+ *
+ * Định nghĩa lấy đúng theo tài liệu kế hoạch, không tự suy diễn thêm:
+ *   - Mục VII.4 (Phân loại lead): CHỈ "Lead nóng" (70–100đ) có hành động
+ *     "Liên hệ ưu tiên ngay" — Ấm/Lạnh có hành động khác (nurturing), không
+ *     phải "xử lý ngay".
+ *   - Mục XI.2 (Dashboard — Danh sách hành động): liệt kê cụ thể mục
+ *     "Lead nóng CHƯA LIÊN HỆ" (không phải mọi lead nóng nói chung).
+ * "Chưa liên hệ" = status vẫn ở bước đầu luồng trạng thái ("Lead mới" —
+ * xem leadStatusOrder/Mục V.3), vì "Đã liên hệ" đã là bước kế tiếp.
+ *
+ * (Trước đây hàm này lọc theo `priorityTier` — ngưỡng 50/80đ tự đặt riêng
+ * cho mục đích hiển thị icon, không khớp ngưỡng 70/40 của tài liệu, và
+ * không loại các lead đã được liên hệ — nay đã sửa lại cho đúng.)
+ */
 export async function fetchHotLeads(limit = 5) {
-  if (!USE_MOCK) return apiFetch("/dashboard/hot-leads", { params: { limit } });
+  if (!USE_MOCK) return apiFetch("/dashboard/top-lead", { params: { limit } });
   await mockDelay(300);
   const rows = [...mockLeads]
-    .filter((l) => priorityTier(l.score) !== "cool")
+    .filter((l) => classify(l.score, l) === "Lead nóng" && l.status === "Lead mới")
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
   return clone(rows);
