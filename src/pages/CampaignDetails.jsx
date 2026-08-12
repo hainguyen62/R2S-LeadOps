@@ -11,6 +11,7 @@ import {
   Check,
   AlertCircle,
   Loader2,
+  X,
 } from "lucide-react";
 import {
   AreaChart,
@@ -22,8 +23,11 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { fetchCampaignById, fetchCampaignTrend, updateCampaign } from "../services/campaignService.js";
+import { fetchLeads } from "../services/leadService.js";
 import { SkeletonBlock } from "../components/ui/Skeleton.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
+import Pill from "../components/ui/Pill.jsx";
+import { statusStyle } from "../data/mockData.js";
 
 const tooltipStyle = {
   background: "#ffffff",
@@ -71,6 +75,14 @@ function filterTrendByRange(trend, rangeDays) {
   return parsed.filter((p) => p._date >= cutoff).map(({ _date, ...rest }) => rest);
 }
 
+// "12/05/2026 09:15" -> "12/05" — để so khớp với nhãn ngày trên biểu đồ xu hướng.
+function toShortDay(dateStr) {
+  const datePart = String(dateStr || "").split(" ")[0];
+  const [d, m] = datePart.split("/");
+  if (!d || !m) return null;
+  return `${d}/${m}`;
+}
+
 export default function CampaignDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -82,6 +94,9 @@ export default function CampaignDetails() {
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState("");
   const [trendRange, setTrendRange] = useState(30); // mặc định 30 ngày gần nhất (Mục 6.4)
+  // ---- Drill-down từ biểu đồ xu hướng: click 1 ngày -> xem lead phát sinh ngày đó ----
+  const [campaignLeads, setCampaignLeads] = useState([]);
+  const [drillDay, setDrillDay] = useState(null); // "dd/mm" đang được xem chi tiết, null = đóng modal
 
   // GET /api/campaigns/{id} + xu hướng lead — xem services/campaignService.js
   useEffect(() => {
@@ -118,6 +133,30 @@ export default function CampaignDetails() {
       cancelled = true;
     };
   }, [id]);
+
+  // Nạp toàn bộ lead thuộc chiến dịch này (để phục vụ drill-down theo ngày
+  // khi click vào biểu đồ xu hướng) — chỉ cần nạp lại khi tên chiến dịch đổi.
+  useEffect(() => {
+    if (!campaign?.name) return;
+    let cancelled = false;
+    fetchLeads({ campaign: campaign.name, pageSize: 500 })
+      .then(({ items }) => {
+        if (!cancelled) setCampaignLeads(items);
+      })
+      .catch(() => {
+        if (!cancelled) setCampaignLeads([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [campaign?.name]);
+
+  // Danh sách lead của chiến dịch phát sinh đúng ngày đang drill-down (so
+  // khớp phần "dd/mm" trong lead.date với nhãn ngày trên biểu đồ).
+  const drillDayLeads = useMemo(() => {
+    if (!drillDay) return [];
+    return campaignLeads.filter((l) => toShortDay(l.date) === drillDay);
+  }, [drillDay, campaignLeads]);
 
   const conversionRate = useMemo(() => {
     if (!campaign || !campaign.leads) return "0%";
@@ -383,7 +422,7 @@ export default function CampaignDetails() {
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-card">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-1">
               <p className="text-sm font-semibold text-slate-900">Xu hướng lead theo thời gian</p>
               <select
                 value={trendRange ?? "all"}
@@ -395,13 +434,23 @@ export default function CampaignDetails() {
                 ))}
               </select>
             </div>
+            {filteredTrend.length > 0 && (
+              <p className="text-[11px] text-slate-400 mb-3">Nhấn vào một điểm trên biểu đồ để xem lead phát sinh ngày đó.</p>
+            )}
             {filteredTrend.length === 0 ? (
               <div className="h-[240px] flex items-center justify-center text-sm text-slate-400">
                 Không có dữ liệu trong khoảng thời gian này.
               </div>
             ) : (
             <ResponsiveContainer width="100%" height={240}>
-              <AreaChart data={filteredTrend} margin={{ left: -20, right: 10, top: 10 }}>
+              <AreaChart
+                data={filteredTrend}
+                margin={{ left: -20, right: 10, top: 10 }}
+                onClick={(state) => {
+                  if (state && state.activeLabel) setDrillDay(state.activeLabel);
+                }}
+                className="cursor-pointer"
+              >
                 <defs>
                   <linearGradient id="campaignTrendArea" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#2563EB" stopOpacity={0.15} />
@@ -429,6 +478,45 @@ export default function CampaignDetails() {
           </div>
         </div>
       </div>
+
+      {/* ---- Modal drill-down: danh sách lead phát sinh trong 1 ngày cụ thể ---- */}
+      {drillDay && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md shadow-elevated max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 pt-6 pb-3 shrink-0">
+              <div>
+                <h3 className="font-semibold text-slate-900">Lead ngày {drillDay}</h3>
+                <p className="text-xs text-slate-500 mt-0.5">{campaign.name}</p>
+              </div>
+              <button onClick={() => setDrillDay(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto px-6 pb-6 space-y-2">
+              {drillDayLeads.length === 0 ? (
+                <div className="py-8 text-center text-sm text-slate-400">
+                  Không tìm thấy lead nào của chiến dịch này trong ngày {drillDay}.
+                </div>
+              ) : (
+                drillDayLeads.map((l) => (
+                  <button
+                    key={l.id}
+                    onClick={() => navigate(`/leads/${l.id}`)}
+                    className="w-full flex items-center justify-between gap-3 text-left border border-slate-100 hover:border-brand-300 hover:bg-slate-50 rounded-lg px-3 py-2.5 transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-900 truncate">{l.name}</p>
+                      <p className="text-xs text-slate-500 truncate">{l.course} · {l.date}</p>
+                    </div>
+                    <Pill text={l.status} map={statusStyle} />
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

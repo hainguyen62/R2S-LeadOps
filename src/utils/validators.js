@@ -43,8 +43,9 @@ export function isRequired(value) {
 
 /**
  * Validate form tạo/sửa lead — Thông tin bắt buộc theo Module 2:
- * Họ và tên, Khóa học quan tâm, Nguồn tiếp cận, và BẮT BUỘC cả
- * Số điện thoại lẫn Email (không còn chấp nhận chỉ 1 trong 2).
+ * Họ và tên, Khóa học quan tâm, Nguồn tiếp cận là bắt buộc. Số điện thoại
+ * và Email chỉ cần CÓ ÍT NHẤT MỘT trong hai (OR), không còn bắt buộc cả
+ * hai — nhưng nếu đã nhập trường nào thì trường đó phải đúng định dạng.
  */
 export function validateLeadForm(form) {
   const errors = {};
@@ -55,16 +56,18 @@ export function validateLeadForm(form) {
   const hasPhone = isRequired(form.phone);
   const hasEmail = isRequired(form.email);
 
-  if (!hasPhone) {
-    errors.phone = "Vui lòng nhập số điện thoại.";
-  } else if (!isValidPhone(form.phone)) {
-    errors.phone = "Số điện thoại không hợp lệ (vd: 0901234567).";
-  }
-
-  if (!hasEmail) {
-    errors.email = "Vui lòng nhập email.";
-  } else if (!isValidEmail(form.email)) {
-    errors.email = "Email không đúng định dạng.";
+  if (!hasPhone && !hasEmail) {
+    // Chưa nhập cả 2 — báo lỗi ở cả hai ô để người dùng biết cần điền ít
+    // nhất 1 trong 2, thay vì chỉ báo ở 1 ô gây khó hiểu.
+    errors.phone = "Vui lòng nhập số điện thoại hoặc email.";
+    errors.email = "Vui lòng nhập số điện thoại hoặc email.";
+  } else {
+    if (hasPhone && !isValidPhone(form.phone)) {
+      errors.phone = "Số điện thoại không hợp lệ (vd: 0901234567).";
+    }
+    if (hasEmail && !isValidEmail(form.email)) {
+      errors.email = "Email không đúng định dạng.";
+    }
   }
 
   return errors;

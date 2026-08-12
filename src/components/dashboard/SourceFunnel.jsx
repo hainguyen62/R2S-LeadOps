@@ -13,6 +13,7 @@ import { SlidersHorizontal, Check } from "lucide-react";
 import ChartCard from "../ui/ChartCard.jsx";
 import FunnelBody from "./FunnelBody.jsx";
 import { SkeletonBlock } from "../ui/Skeleton.jsx";
+import { buildColorMap } from "../../utils/chartColors.js";
 
 const tooltipStyle = {
   background: "#ffffff",
@@ -24,7 +25,7 @@ const tooltipStyle = {
   padding: "8px 12px",
 };
 
-function ConversionFunnelCard({ funnel }) {
+function ConversionFunnelCard({ funnel, onStageClick }) {
   return (
     <div className="funnel-card">
       <div className="funnel-card__head">
@@ -34,7 +35,12 @@ function ConversionFunnelCard({ funnel }) {
         </button>
       </div>
 
-      <FunnelBody stages={funnel} />
+      <FunnelBody
+        stages={funnel}
+        onStageClick={
+          onStageClick ? (stage) => onStageClick({ title: `Trạng thái: ${stage.name}`, filters: { status: stage.name } }) : undefined
+        }
+      />
     </div>
   );
 }
@@ -48,7 +54,7 @@ const STATUS_COLORS = {
   "Đã đăng ký": "#10b981",
 };
 
-function DistributionBarChart({ data, colorMap }) {
+function DistributionBarChart({ data, colorMap, onBarClick }) {
   return (
     <ResponsiveContainer width="100%" height={240}>
       <BarChart data={data} margin={{ left: -20, right: 10, bottom: 30 }}>
@@ -66,7 +72,14 @@ function DistributionBarChart({ data, colorMap }) {
         />
         <YAxis tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} />
         <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "#eef2f7" }} />
-        <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={40} fill="#3b82f6">
+        <Bar
+          dataKey="value"
+          radius={[4, 4, 0, 0]}
+          maxBarSize={40}
+          fill="#3b82f6"
+          cursor={onBarClick ? "pointer" : undefined}
+          onClick={onBarClick ? (entry) => onBarClick(entry) : undefined}
+        >
           {colorMap &&
             (data || []).map((entry) => <Cell key={entry.name} fill={colorMap[entry.name] || "#94a3b8"} />)}
         </Bar>
@@ -144,11 +157,11 @@ function ChartSelectMenu({ value, onChange }) {
 // qua props. Popup "Đổi biểu đồ" trên card này cho chọn 1 trong 2: "Nguồn
 // lead" hoặc "Trạng thái lead" — chọn cái nào thì THAY biểu đồ ngay trong
 // CÙNG 1 khung (không thêm card mới bên cạnh, tránh chiếm thêm không gian).
-export default function SourceFunnel({ sources, statusBreakdown, funnel, loading }) {
+export default function SourceFunnel({ sources, statusBreakdown, funnel, loading, onDrill }) {
   const [chartMode, setChartMode] = useState("source");
   const activeOption = CHART_OPTIONS.find((o) => o.value === chartMode);
   const activeData = chartMode === "status" ? statusBreakdown : sources;
-  const activeColorMap = chartMode === "status" ? STATUS_COLORS : undefined;
+  const activeColorMap = chartMode === "status" ? STATUS_COLORS : buildColorMap((sources || []).map((s) => s.name));
 
   if (loading) {
     return (
@@ -169,10 +182,23 @@ export default function SourceFunnel({ sources, statusBreakdown, funnel, loading
         title={activeOption.label}
         action={<ChartSelectMenu value={chartMode} onChange={setChartMode} />}
       >
-        <DistributionBarChart data={activeData} colorMap={activeColorMap} />
+        <DistributionBarChart
+          data={activeData}
+          colorMap={activeColorMap}
+          onBarClick={
+            onDrill
+              ? (entry) =>
+                  onDrill(
+                    chartMode === "status"
+                      ? { title: `Trạng thái: ${entry.name}`, filters: { status: entry.name } }
+                      : { title: `Nguồn: ${entry.name}`, filters: { source: entry.name } }
+                  )
+              : undefined
+          }
+        />
       </ChartCard>
 
-      <ConversionFunnelCard funnel={funnel} />
+      <ConversionFunnelCard funnel={funnel} onStageClick={onDrill} />
     </>
   );
 }

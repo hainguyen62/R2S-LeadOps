@@ -20,6 +20,7 @@ import {
   ArrowUp,
   ArrowDown,
   Archive,
+  ArchiveRestore,
   Users,
   SearchX,
   Loader2,
@@ -34,7 +35,8 @@ import EmptyState from "../components/ui/EmptyState.jsx";
 import { LeadListSkeleton } from "../components/ui/Skeleton.jsx";
 import { useToast } from "../components/ui/ToastProvider.jsx";
 import { statusStyle, leadStatusOrder, courseOptions } from "../data/mockData.js";
-import { fetchLeads, fetchMyLeads, createLead, archiveLead, importLeads, exportLeadsCsv, fetchLeadFilterOptions } from "../services/leadService.js";
+import { fetchLeads, fetchMyLeads, createLead, archiveLead, unarchiveLead, importLeads, exportLeadsCsv, fetchLeadFilterOptions } from "../services/leadService.js";
+import { fetchUsers } from "../services/settingsService.js";
 import { validateLeadForm, hasErrors } from "../utils/validators.js";
 import { exportToCsv } from "../utils/exportCsv.js";
 import { importLeadsFromCsv } from "../utils/importCsv.js";
@@ -90,8 +92,23 @@ export default function Leads() {
   const [importing, setImporting] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState(null);
   const [archiving, setArchiving] = useState(false);
+  const [showArchived, setShowArchived] = useState(false); // xem "Lead lưu trữ" thay vì danh sách hoạt động
+  const [restoringId, setRestoringId] = useState(null);
+  const [salesUsers, setSalesUsers] = useState([]); // danh sách Sales cho dropdown "Người phụ trách"
   const [submitting, setSubmitting] = useState(false);
   const [refreshTick, forceRefresh] = useState(0);
+
+  // GET /api/users — nạp danh sách Sales/Admissions cho dropdown "Người phụ
+  // trách" ở form Thêm lead. Chỉ cần nạp 1 lần, không phụ thuộc vào Sales/
+  // Admissions hiện tại (họ vốn không được tạo lead cho người khác).
+  // Lưu ý khi nối Back-end thật: hiện dùng chung /admin/users (chỉ Admin gọi
+  // được) — nên đổi sang 1 endpoint nhẹ hơn kiểu GET /users?role=Sales,
+  // không giới hạn quyền Admin, để mọi vai trò tạo lead đều gọi được.
+  useEffect(() => {
+    fetchUsers()
+      .then((list) => setSalesUsers(list.filter((u) => u.role === "Sales/Admissions" && u.status !== "Đã khóa")))
+      .catch(() => {});
+  }, []);
 
   // GET /api/leads/filter-options — nạp 1 lần cho các lựa chọn Khóa học/Nguồn/
   // Người phụ trách/Chiến dịch trong bộ lọc nâng cao.
@@ -136,6 +153,7 @@ export default function Leads() {
       source: advFilters.source,
       assignee: advFilters.assignee,
       campaign: advFilters.campaign,
+      archivedOnly: showArchived,
     }, user?.name)
       .then(({ items, total: t }) => {
         if (cancelled) return;
@@ -151,7 +169,7 @@ export default function Leads() {
     return () => {
       cancelled = true;
     };
-  }, [query, statusFilter, classFilter, sortKey, sortDir, page, refreshTick, advFilters, user]);
+  }, [query, statusFilter, classFilter, sortKey, sortDir, page, refreshTick, advFilters, user, showArchived]);
 
   const emptyForm = {
     // Bắt buộc
@@ -161,6 +179,7 @@ export default function Leads() {
     phone: "",
     email: "",
     // Mở rộng (tùy chọn)
+    assignee: "", // "" = Chưa phân công
     campaign: "",
     school: "",
     currentLevel: "",
@@ -316,33 +335,73 @@ export default function Leads() {
     }
   };
 
+  // POST /api/leads/{id}/unarchive — khôi phục lead từ trang "Lead lưu trữ"
+  // về danh sách hoạt động bình thường.
+  const handleRestoreLead = async (lead) => {
+    setRestoringId(lead.id);
+    try {
+      await unarchiveLead(lead.id);
+      toast.success(`Đã khôi phục lead "${lead.name}".`);
+      forceRefresh((n) => n + 1);
+    } catch (err) {
+      toast.error(err.message || "Khôi phục thất bại.");
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
+  // Chuyển qua lại giữa danh sách lead hoạt động <-> lead đã lưu trữ.
+  const toggleArchivedView = () => {
+    setShowArchived((v) => !v);
+    setPage(1);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Quản lý Lead</h2>
-          <p className="text-sm text-slate-500">Quản lý, phân loại và chấm điểm khách hàng tiềm năng</p>
+          <h2 className="text-lg font-semibold text-slate-900">
+            {showArchived ? "Lead đã lưu trữ" : "Quản lý Lead"}
+          </h2>
+          <p className="text-sm text-slate-500">
+            {showArchived
+              ? "Các lead đã được ẩn khỏi danh sách chính — dữ liệu vẫn được giữ nguyên, có thể khôi phục bất cứ lúc nào."
+              : "Quản lý, phân loại và chấm điểm khách hàng tiềm năng"}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={handleExport}
-            className="flex items-center gap-1.5 text-xs border border-slate-300 rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50"
+            onClick={toggleArchivedView}
+            className={`flex items-center gap-1.5 text-xs border rounded-lg px-3 py-2 ${
+              showArchived ? "border-brand-500 text-brand-700 bg-brand-50" : "border-slate-300 text-slate-600 hover:bg-slate-50"
+            }`}
           >
-            <Download size={14} /> Xuất CSV
+            {showArchived ? <ChevronLeft size={14} /> : <Archive size={14} />}
+            {showArchived ? "Quay lại danh sách" : "Lead lưu trữ"}
           </button>
-          <button
-            onClick={() => { setShowImport(true); setImportMsg(""); }}
-            className="flex items-center gap-1.5 text-xs border border-slate-300 rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50"
-          >
-            <Upload size={14} /> Nhập CSV
-          </button>
-          <button
-            onClick={() => { setForm(emptyForm); setFormErrors({}); setShowExtended(false); setShowAdd(true); }}
-            className="flex items-center gap-1.5 text-xs bg-brand-600 rounded-lg px-3 py-2 text-white hover:bg-brand-500"
-          >
-            <Plus size={14} /> Thêm lead
-          </button>
+          {!showArchived && (
+            <>
+              <button
+                onClick={handleExport}
+                className="flex items-center gap-1.5 text-xs border border-slate-300 rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50"
+              >
+                <Download size={14} /> Xuất CSV
+              </button>
+              <button
+                onClick={() => { setShowImport(true); setImportMsg(""); }}
+                className="flex items-center gap-1.5 text-xs border border-slate-300 rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50"
+              >
+                <Upload size={14} /> Nhập CSV
+              </button>
+              <button
+                onClick={() => { setForm(emptyForm); setFormErrors({}); setShowExtended(false); setShowAdd(true); }}
+                className="flex items-center gap-1.5 text-xs bg-brand-600 rounded-lg px-3 py-2 text-white hover:bg-brand-500"
+              >
+                <Plus size={14} /> Thêm lead
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -656,11 +715,20 @@ export default function Leads() {
                         <span className="p-1.5 text-slate-200" title="Chưa có số điện thoại"><MessageCircle size={13} /></span>
                       )}
                       <button
-                        onClick={() => setArchiveTarget(l)}
-                        className="p-1.5 rounded-md text-slate-400 hover:bg-amber-50 hover:text-amber-600"
-                        title="Lưu trữ lead"
+                        onClick={() => (showArchived ? handleRestoreLead(l) : setArchiveTarget(l))}
+                        disabled={restoringId === l.id}
+                        className={`p-1.5 rounded-md text-slate-400 disabled:opacity-50 ${
+                          showArchived ? "hover:bg-emerald-50 hover:text-emerald-600" : "hover:bg-amber-50 hover:text-amber-600"
+                        }`}
+                        title={showArchived ? "Khôi phục lead" : "Lưu trữ lead"}
                       >
-                        <Archive size={13} />
+                        {restoringId === l.id ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : showArchived ? (
+                          <ArchiveRestore size={13} />
+                        ) : (
+                          <Archive size={13} />
+                        )}
                       </button>
                     </div>
                   </td>
@@ -670,9 +738,13 @@ export default function Leads() {
                 <tr>
                   <td colSpan={12} className="p-0">
                     <EmptyState
-                      icon={SearchX}
-                      title="Không tìm thấy kết quả phù hợp"
-                      description="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc trạng thái/phân loại."
+                      icon={showArchived ? Archive : SearchX}
+                      title={showArchived ? "Chưa có lead nào được lưu trữ" : "Không tìm thấy kết quả phù hợp"}
+                      description={
+                        showArchived
+                          ? "Lead sau khi lưu trữ sẽ hiển thị ở đây, có thể khôi phục lại bất cứ lúc nào."
+                          : "Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc trạng thái/phân loại."
+                      }
                       compact
                     />
                   </td>
@@ -864,9 +936,23 @@ export default function Leads() {
                 </select>
               </div>
 
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Người phụ trách</label>
+                <select
+                  value={form.assignee}
+                  onChange={(e) => setForm({ ...form, assignee: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+                >
+                  <option value="">Chưa phân công</option>
+                  {salesUsers.map((u) => (
+                    <option key={u.id} value={u.name}>{u.name}</option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-slate-500 block mb-1">Số điện thoại *</label>
+                  <label className="text-xs text-slate-500 block mb-1">Số điện thoại</label>
                   <input
                     value={form.phone}
                     onChange={(e) => setForm({ ...form, phone: e.target.value })}
@@ -878,7 +964,7 @@ export default function Leads() {
                   {formErrors.phone && <p className="text-[11px] text-red-600 mt-1">{formErrors.phone}</p>}
                 </div>
                 <div>
-                  <label className="text-xs text-slate-500 block mb-1">Email *</label>
+                  <label className="text-xs text-slate-500 block mb-1">Email</label>
                   <input
                     value={form.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -890,7 +976,7 @@ export default function Leads() {
                   {formErrors.email && <p className="text-[11px] text-red-600 mt-1">{formErrors.email}</p>}
                 </div>
               </div>
-              <p className="text-[11px] text-slate-400 -mt-2">* Bắt buộc nhập cả số điện thoại và email.</p>
+              <p className="text-[11px] text-slate-400 -mt-2">* Cần nhập ít nhất một trong hai: số điện thoại hoặc email.</p>
 
               {/* ---- Thông tin mở rộng (tùy chọn) ---- */}
               <button

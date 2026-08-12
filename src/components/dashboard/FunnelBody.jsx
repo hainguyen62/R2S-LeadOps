@@ -49,10 +49,15 @@ export function buildFunnelRows(stages) {
  *  Trả về Fragment (không bọc div) để 3 ô này thực sự là con trực tiếp
  *  của .funnel-grid — điều kiện bắt buộc để CSS Grid tự đồng bộ chiều cao
  *  hàng giữa cột hình phễu và cột dữ liệu. */
-function FunnelGridRow({ row, isLast }) {
+function FunnelGridRow({ row, isLast, onClick }) {
+  const clickable = Boolean(onClick);
   return (
     <>
-      <div className="funnel-grid__cell funnel-grid__cell--shape" role="cell">
+      <div
+        className={`funnel-grid__cell funnel-grid__cell--shape${clickable ? " cursor-pointer" : ""}`}
+        role="cell"
+        onClick={onClick}
+      >
         <span
           className="funnel-grid__shape"
           style={{
@@ -65,16 +70,18 @@ function FunnelGridRow({ row, isLast }) {
       <div
         className={`funnel-grid__cell funnel-grid__cell--stage${
           isLast ? " funnel-grid__cell--last" : ""
-        }`}
+        }${clickable ? " cursor-pointer hover:underline" : ""}`}
         role="cell"
+        onClick={onClick}
       >
         <span className="funnel-grid__stage-text">{row.name}</span>
       </div>
       <div
         className={`funnel-grid__cell funnel-grid__cell--value${
           isLast ? " funnel-grid__cell--last" : ""
-        }`}
+        }${clickable ? " cursor-pointer" : ""}`}
         role="cell"
+        onClick={onClick}
       >
         <span className="funnel-grid__value-text">
           {row.value} <span className="funnel-grid__pct">({row.pct})</span>
@@ -85,11 +92,16 @@ function FunnelGridRow({ row, isLast }) {
 }
 
 /** Giao diện tối giản dùng khi không đủ chiều rộng cho bảng 3 cột. */
-function FunnelCompactList({ rows }) {
+function FunnelCompactList({ rows, onStageClick }) {
   return (
     <div className="funnel-compact" role="table" aria-label="Phễu chuyển đổi theo giai đoạn">
       {rows.map((row) => (
-        <div className="funnel-compact__row" key={row.name} role="row">
+        <div
+          className={`funnel-compact__row${onStageClick ? " cursor-pointer hover:opacity-75" : ""}`}
+          key={row.name}
+          role="row"
+          onClick={onStageClick ? () => onStageClick(row) : undefined}
+        >
           <span className="funnel-compact__name" role="cell">
             {row.name}
           </span>
@@ -108,18 +120,23 @@ function FunnelCompactList({ rows }) {
  *  Component này KHÔNG có khung/border/tiêu đề riêng — nó được đặt bên
  *  trong một "card" khác (ChartCard ở Reports, hoặc .funnel-card ở
  *  Dashboard) để 2 nơi tái sử dụng chung một chuẩn hiển thị. */
-export default function FunnelBody({ stages }) {
+export default function FunnelBody({ stages, onStageClick }) {
   const rows = buildFunnelRows(stages);
 
   return (
     <div className="funnel-card__body">
       <div className="funnel-grid" role="table" aria-label="Phễu chuyển đổi theo giai đoạn">
         {rows.map((row, i) => (
-          <FunnelGridRow key={row.name} row={row} isLast={i === rows.length - 1} />
+          <FunnelGridRow
+            key={row.name}
+            row={row}
+            isLast={i === rows.length - 1}
+            onClick={onStageClick ? () => onStageClick(row) : undefined}
+          />
         ))}
       </div>
 
-      <FunnelCompactList rows={rows} />
+      <FunnelCompactList rows={rows} onStageClick={onStageClick} />
     </div>
   );
 }

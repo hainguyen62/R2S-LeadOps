@@ -92,11 +92,15 @@ export async function fetchLeads(params = {}) {
     source = "Tất cả",
     assignee = "Tất cả",
     campaign = "Tất cả",
+    archivedOnly = false, // true = chỉ lấy lead ĐÃ lưu trữ (trang "Lead lưu trữ")
   } = params;
 
   const now = Date.now();
   let rows = mockLeads.filter((l) => {
-    if (l.archived) return false;
+    // Mặc định (archivedOnly=false): chỉ lấy lead đang hoạt động, ẩn lead đã
+    // lưu trữ. Khi archivedOnly=true (trang Lead lưu trữ): đảo ngược lại,
+    // chỉ lấy đúng những lead đã lưu trữ.
+    if (archivedOnly ? !l.archived : l.archived) return false;
 
     const q = query.toLowerCase();
     const qDigits = query.replace(/\D/g, "");
@@ -257,12 +261,14 @@ export async function createLead(payload) {
       },
     });
   }
-  if (!payload.phone?.trim() || !payload.email?.trim()) {
-    throw new ApiError("Vui lòng nhập đầy đủ số điện thoại và email.", {
+  // Số điện thoại & Email: chỉ cần có ít nhất 1 trong 2 (OR) — khớp rule
+  // OR mới ở utils/validators.js, tránh mock "backend" chặn ngược lại FE.
+  if (!payload.phone?.trim() && !payload.email?.trim()) {
+    throw new ApiError("Vui lòng nhập số điện thoại hoặc email.", {
       status: 400,
       fieldErrors: {
-        phone: !payload.phone?.trim() ? "Vui lòng nhập số điện thoại." : undefined,
-        email: !payload.email?.trim() ? "Vui lòng nhập email." : undefined,
+        phone: "Vui lòng nhập số điện thoại hoặc email.",
+        email: "Vui lòng nhập số điện thoại hoặc email.",
       },
     });
   }
@@ -276,7 +282,7 @@ export async function createLead(payload) {
     date: new Date().toLocaleDateString("vi-VN"),
     phone: payload.phone?.trim() || "—",
     email: payload.email?.trim() || "—",
-    assignee: payload.assignee || "Tư vấn viên A",
+    assignee: payload.assignee || undefined, // rỗng/"Chưa phân công" -> chưa có người phụ trách
     campaign: payload.campaign?.trim() || undefined,
     school: payload.school?.trim() || undefined,
     currentLevel: payload.currentLevel || undefined,
@@ -352,6 +358,16 @@ export async function archiveLead(id) {
   const idx = mockLeads.findIndex((l) => matchId(l.id, id));
   if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
   mockLeads[idx].archived = true;
+  return clone(mockLeads[idx]);
+}
+
+/** POST /api/leads/{id}/unarchive — khôi phục lead đã lưu trữ về danh sách hoạt động */
+export async function unarchiveLead(id) {
+  if (!USE_MOCK) return apiFetch(`/leads/${id}/unarchive`, { method: "POST" });
+  await mockDelay();
+  const idx = mockLeads.findIndex((l) => matchId(l.id, id));
+  if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
+  mockLeads[idx].archived = false;
   return clone(mockLeads[idx]);
 }
 

@@ -58,14 +58,18 @@ describe("validateLeadForm", () => {
     expect(errors.email).toBeDefined();
   });
 
-  it("báo lỗi khi chỉ thiếu một trong hai (phone hoặc email) — cả hai đều bắt buộc", () => {
-    const missingEmail = validateLeadForm({ name: "A", course: "X", source: "Y", phone: "0901234567" });
-    expect(missingEmail.email).toBeDefined();
-    expect(missingEmail.phone).toBeUndefined();
+  it("hợp lệ khi chỉ có một trong hai (phone hoặc email) — không còn bắt buộc cả hai", () => {
+    const withPhoneOnly = validateLeadForm({ name: "A", course: "X", source: "Y", phone: "0901234567" });
+    expect(hasErrors(withPhoneOnly)).toBe(false);
 
-    const missingPhone = validateLeadForm({ name: "A", course: "X", source: "Y", email: "a@b.com" });
-    expect(missingPhone.phone).toBeDefined();
-    expect(missingPhone.email).toBeUndefined();
+    const withEmailOnly = validateLeadForm({ name: "A", course: "X", source: "Y", email: "a@b.com" });
+    expect(hasErrors(withEmailOnly)).toBe(false);
+  });
+
+  it("báo lỗi ở cả hai ô khi thiếu cả phone lẫn email", () => {
+    const errors = validateLeadForm({ name: "A", course: "X", source: "Y" });
+    expect(errors.phone).toBeDefined();
+    expect(errors.email).toBeDefined();
   });
 
   it("báo lỗi định dạng khi phone/email sai, dù đã điền", () => {

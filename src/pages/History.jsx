@@ -6,6 +6,8 @@ import { SkeletonBlock } from "../components/ui/Skeleton.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 import { statusStyle } from "../data/mockData.js";
 import { fetchAllActivities } from "../services/leadService.js";
+import { useAuth } from "../context/AuthContext.jsx";
+import { isSales } from "../utils/permissions.js";
 
 const pageSize = 10;
 
@@ -49,6 +51,8 @@ const dateRangeOptions = [
 ];
 
 export default function History() {
+  const user = useAuth();
+  const salesView = isSales(user);
   const [allHistory, setAllHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -62,12 +66,16 @@ export default function History() {
   const [rangeFilter, setRangeFilter] = useState("all");
 
   // Gộp từ GET /api/leads/{id}/activities của toàn bộ lead — xem leadService.js
+  // Sales/Admissions chỉ được xem lịch sử của lead do CHÍNH MÌNH phụ trách
+  // (Mục IV.3: "Xem lịch sử chăm sóc — giới hạn theo lead được phân công");
+  // các vai trò còn lại có quyền viewAllCareHistory nên xem toàn bộ.
   useEffect(() => {
     let cancelled = false;
     fetchAllActivities()
       .then((data) => {
         if (!cancelled) {
-          setAllHistory(data);
+          const scoped = salesView ? data.filter((h) => h.assignee === user?.name) : data;
+          setAllHistory(scoped);
           setPage(1);
         }
       })
@@ -80,7 +88,7 @@ export default function History() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [salesView, user]);
 
   // Danh sách Lead xuất hiện trong lịch sử — cho dropdown "Lead"
   const leadOptions = useMemo(
@@ -133,7 +141,9 @@ export default function History() {
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-slate-900">Lịch sử chăm sóc</h2>
-        <p className="text-sm text-slate-500">Theo dõi toàn bộ lịch sử tư vấn và chăm sóc lead</p>
+        <p className="text-sm text-slate-500">
+          {salesView ? "Lịch sử tư vấn và chăm sóc của các lead do bạn phụ trách" : "Theo dõi toàn bộ lịch sử tư vấn và chăm sóc lead"}
+        </p>
       </div>
 
       {/* Thanh bộ lọc: Tìm kiếm / Lead / Nhân viên / Loại hoạt động / Khoảng thời gian */}

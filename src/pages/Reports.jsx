@@ -14,6 +14,7 @@ import {
 import { Download, AlertCircle, CalendarRange, X, GitBranch } from "lucide-react";
 import ChartCard from "../components/ui/ChartCard.jsx";
 import FunnelBody from "../components/dashboard/FunnelBody.jsx";
+import LeadListModal from "../components/dashboard/LeadListModal.jsx";
 import { SkeletonBlock } from "../components/ui/Skeleton.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 import {
@@ -25,6 +26,17 @@ import { fetchCampaigns } from "../services/campaignService.js";
 import { exportToCsv } from "../utils/exportCsv.js";
 import { useNavigate } from "react-router-dom";
 import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { getCategoryColor, tint } from "../utils/chartColors.js";
+import { Cell } from "recharts";
+
+// Tên hiển thị "Nóng/Ấm/Lạnh" (dùng trong classification/donut) -> giá trị
+// cls thật của lead trong mockData ("Lead nóng"...) — cần map lại vì 2 nơi
+// dùng 2 dạng tên khác nhau cho cùng 1 khái niệm.
+const CLASS_NAME_TO_CLS = {
+  "Nóng": "Lead nóng",
+  "Ấm": "Lead ấm",
+  "Lạnh": "Lead lạnh",
+};
 
 const tooltipStyle = {
   background: "#ffffff",
@@ -61,6 +73,9 @@ export default function Reports() {
   const [campaignSortDir, setCampaignSortDir] = useState("desc");
   // Chiến dịch đang được xem nhanh (drill-down) sau khi click vào biểu đồ — Mục 8.3.
   const [drillCampaign, setDrillCampaign] = useState(null);
+  // Drill-down chung: click nguồn / trạng thái / phễu / KPI chiến dịch -> mở
+  // danh sách lead tương ứng (LeadListModal) — "Drill-down từ báo cáo → Lead list".
+  const [leadDrill, setLeadDrill] = useState(null); // { title, filters }
 
   // Dropdown khoảng thời gian dùng chung (giống Dashboard.jsx) — áp dụng cho
   // "Lead theo ngày", "Nguồn lead", "Phân loại lead", "Phễu chuyển đổi".
@@ -232,7 +247,19 @@ export default function Reports() {
               <XAxis dataKey="name" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={{ stroke: "#cbd5e1" }} tickLine={false} />
               <YAxis tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "#f1f5f9" }} />
-              <Bar dataKey="value" fill="#a855f7" radius={[4, 4, 0, 0]} maxBarSize={40} />
+              <Bar
+                dataKey="value"
+                radius={[4, 4, 0, 0]}
+                maxBarSize={40}
+                cursor="pointer"
+                onClick={(entry) =>
+                  setLeadDrill({ title: `Nguồn: ${entry.name}`, filters: { source: entry.name } })
+                }
+              >
+                {sources.map((s) => (
+                  <Cell key={s.name} fill={getCategoryColor(s.name)} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -242,7 +269,17 @@ export default function Reports() {
         <ChartCard title="Phân loại lead" className="lg:col-span-1">
           <div className="space-y-3 mt-2">
             {classification.map((c) => (
-              <div key={c.name} className="flex items-center gap-3">
+              <button
+                key={c.name}
+                type="button"
+                onClick={() =>
+                  setLeadDrill({
+                    title: `Lead ${c.name.toLowerCase()}`,
+                    filters: { cls: CLASS_NAME_TO_CLS[c.name] || c.name },
+                  })
+                }
+                className="flex items-center gap-3 w-full text-left hover:opacity-80"
+              >
                 <div className="w-20 text-xs text-slate-500">{c.name}</div>
                 <div className="flex-1 h-5 bg-slate-100 rounded-md overflow-hidden">
                   <div
@@ -251,13 +288,16 @@ export default function Reports() {
                   />
                 </div>
                 <div className="w-8 text-xs text-slate-500 text-right">{c.value}</div>
-              </div>
+              </button>
             ))}
           </div>
         </ChartCard>
 
         <ChartCard title="Phễu chuyển đổi" className="lg:col-span-2">
-          <FunnelBody stages={funnel} />
+          <FunnelBody
+            stages={funnel}
+            onStageClick={(stage) => setLeadDrill({ title: `Trạng thái: ${stage.name}`, filters: { status: stage.name } })}
+          />
         </ChartCard>
       </div>
 
@@ -288,21 +328,27 @@ export default function Reports() {
                 <Bar
                   dataKey="leads"
                   name="Lead"
-                  fill="#3b82f6"
                   radius={[4, 4, 0, 0]}
                   maxBarSize={28}
                   cursor="pointer"
                   onClick={(data) => setDrillCampaign(data)}
-                />
+                >
+                  {campaignReport.map((c) => (
+                    <Cell key={c.id} fill={getCategoryColor(c.name)} />
+                  ))}
+                </Bar>
                 <Bar
                   dataKey="registrations"
                   name="Đã đăng ký"
-                  fill="#22c55e"
                   radius={[4, 4, 0, 0]}
                   maxBarSize={28}
                   cursor="pointer"
                   onClick={(data) => setDrillCampaign(data)}
-                />
+                >
+                  {campaignReport.map((c) => (
+                    <Cell key={c.id} fill={tint(getCategoryColor(c.name), 0.5)} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
 
@@ -394,22 +440,55 @@ export default function Reports() {
               </span>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-slate-50 rounded-lg p-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLeadDrill({ title: `Tổng lead · ${drillCampaign.name}`, filters: { campaign: drillCampaign.name } })
+                  }
+                  className="bg-slate-50 rounded-lg p-3 text-left hover:bg-slate-100"
+                >
                   <p className="text-[11px] text-slate-500">Lead</p>
                   <p className="text-lg font-semibold text-slate-900">{drillCampaign.leads}</p>
-                </div>
-                <div className="bg-slate-50 rounded-lg p-3">
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLeadDrill({
+                      title: `Lead nóng · ${drillCampaign.name}`,
+                      filters: { campaign: drillCampaign.name, cls: "Lead nóng" },
+                    })
+                  }
+                  className="bg-slate-50 rounded-lg p-3 text-left hover:bg-slate-100"
+                >
                   <p className="text-[11px] text-slate-500">Lead nóng</p>
                   <p className="text-lg font-semibold text-slate-900">{drillCampaign.hotLeads}</p>
-                </div>
-                <div className="bg-slate-50 rounded-lg p-3">
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLeadDrill({
+                      title: `Đã đặt cọc · ${drillCampaign.name}`,
+                      filters: { campaign: drillCampaign.name, status: "Đã đặt cọc" },
+                    })
+                  }
+                  className="bg-slate-50 rounded-lg p-3 text-left hover:bg-slate-100"
+                >
                   <p className="text-[11px] text-slate-500">Đã đặt cọc</p>
                   <p className="text-lg font-semibold text-slate-900">{drillCampaign.deposits}</p>
-                </div>
-                <div className="bg-slate-50 rounded-lg p-3">
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLeadDrill({
+                      title: `Đã đăng ký · ${drillCampaign.name}`,
+                      filters: { campaign: drillCampaign.name, status: "Đã đăng ký" },
+                    })
+                  }
+                  className="bg-slate-50 rounded-lg p-3 text-left hover:bg-slate-100"
+                >
                   <p className="text-[11px] text-slate-500">Đã đăng ký</p>
                   <p className="text-lg font-semibold text-slate-900">{drillCampaign.registrations}</p>
-                </div>
+                </button>
               </div>
 
               <div className="space-y-2 text-xs border-t border-slate-100 pt-3">
@@ -448,6 +527,14 @@ export default function Reports() {
             </div>
           </div>
         </div>
+      )}
+
+      {leadDrill && (
+        <LeadListModal
+          title={leadDrill.title}
+          filters={leadDrill.filters}
+          onClose={() => setLeadDrill(null)}
+        />
       )}
     </div>
   );

@@ -8,6 +8,7 @@ import LeadCharts from "../components/dashboard/LeadCharts.jsx";
 import SourceFunnel from "../components/dashboard/SourceFunnel.jsx";
 import HotLeadsPanel from "../components/dashboard/HotLeadsPanel.jsx";
 import LeadDetailModal from "../components/dashboard/LeadDetailModal.jsx";
+import LeadListModal from "../components/dashboard/LeadListModal.jsx";
 import {
   fetchDashboardOverview,
   fetchDashboardByRange,
@@ -25,10 +26,22 @@ function rangeLabel(days) {
   return days === 1 ? "hôm nay" : `${days} ngày qua`;
 }
 
+// Ánh xạ key của thẻ KPI -> bộ lọc lead tương ứng khi click vào thẻ (Mục
+// "Click KPI để xem Lead tương ứng"). "Tổng lead"/"Lead mới" không có tiêu
+// chí phân loại riêng nên mở ra toàn bộ danh sách lead.
+const STAT_KEY_TO_FILTERS = {
+  total: {},
+  new: {},
+  hot: { cls: "Lead nóng" },
+  deposited: { status: "Đã đặt cọc" },
+  registered: { status: "Đã đăng ký" },
+};
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState(null);
   const [selectedLead, setSelectedLead] = useState(null);
+  const [leadDrill, setLeadDrill] = useState(null); // { title, filters }
 
   // Thẻ "Tổng lead" — không phụ thuộc khoảng thời gian, chỉ tải 1 lần.
   const [totalLeadStat, setTotalLeadStat] = useState(null);
@@ -177,7 +190,15 @@ export default function Dashboard() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-        {totalLeadStat && <StatCard {...totalLeadStat} />}
+        {totalLeadStat && (
+          <button
+            type="button"
+            onClick={() => setLeadDrill({ title: totalLeadStat.label, filters: STAT_KEY_TO_FILTERS.total })}
+            className="text-left"
+          >
+            <StatCard {...totalLeadStat} />
+          </button>
+        )}
         {loadingRange
           ? Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="bg-white border border-slate-300 rounded-card p-6 h-[92px] animate-pulse" />
@@ -194,7 +215,16 @@ export default function Dashboard() {
               />
             </div>
           )
-          : rangeStats.map((s) => <StatCard key={s.key} {...s} />)}
+          : rangeStats.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => setLeadDrill({ title: s.label, filters: STAT_KEY_TO_FILTERS[s.key] || {} })}
+                className="text-left"
+              >
+                <StatCard {...s} />
+              </button>
+            ))}
       </div>
 
       {/* Row: line chart + donut */}
@@ -221,6 +251,7 @@ export default function Dashboard() {
           statusBreakdown={rangeData?.statusBreakdown || []}
           funnel={rangeData?.funnel || []}
           loading={loadingRange}
+          onDrill={setLeadDrill}
         />
         <HotLeadsPanel
           selectedId={selectedId}
@@ -231,6 +262,15 @@ export default function Dashboard() {
 
       {/* Click 1 lead -> popup chi tiết (không chiếm không gian cố định) */}
       <LeadDetailModal lead={selectedLead} onClose={() => setSelectedId(null)} />
+
+      {/* Click KPI / nguồn / trạng thái -> danh sách lead tương ứng */}
+      {leadDrill && (
+        <LeadListModal
+          title={leadDrill.title}
+          filters={leadDrill.filters}
+          onClose={() => setLeadDrill(null)}
+        />
+      )}
     </div>
   );
 }

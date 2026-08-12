@@ -52,7 +52,7 @@ const MATRIX = {
     manageUsers: false, // không được liệt kê — Module 1 (tạo/khóa TK) là việc của Admin
     manageCourses: false,
     manageSources: false,
-    manageCampaigns: false, // "Theo dõi nguồn và chiến dịch." = xem/theo dõi, không phải tạo/sửa/xóa
+    manageCampaigns: true, // "Theo dõi nguồn và chiến dịch." — theo yêu cầu cập nhật: Leader Marketing giữ quyền tạo/sửa/xóa chiến dịch
     configureScoring: "partial", // "Điều chỉnh MỘT SỐ quy tắc chấm điểm."
     exportData: true, // "Xuất báo cáo."
     viewSystemLogs: false,
@@ -69,8 +69,8 @@ const MATRIX = {
     viewDashboard: true, // "Xem Dashboard Marketing."
     manageUsers: false,
     manageCourses: false,
-    manageSources: true, // "Xem nguồn lead" + gắn với việc tạo chiến dịch/UTM
-    manageCampaigns: true, // "Tạo chiến dịch và đường dẫn UTM."
+    manageSources: true, // "Xem nguồn lead" — chỉ xem, không còn quyền tạo/sửa/xóa chiến dịch
+    manageCampaigns: false, // theo yêu cầu cập nhật: chỉ Marketing Staff KHÔNG được thêm/sửa/xóa chiến dịch
     configureScoring: false,
     exportData: false, // không được liệt kê rõ cho Marketing Staff
     viewSystemLogs: false,

@@ -6,6 +6,8 @@ import { SkeletonBlock } from "../components/ui/Skeleton.jsx";
 import ConfirmDialog from "../components/ui/ConfirmDialog.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 import { useToast } from "../components/ui/ToastProvider.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
+import { can } from "../utils/permissions.js";
 
 // "2026-05-01" -> "01/05"
 const formatShortDate = (iso) => {
@@ -44,6 +46,10 @@ const campaignStatusStyle = {
 export default function Campaigns() {
   const navigate = useNavigate();
   const toast = useToast();
+  const user = useAuth();
+  // Leader Marketing chỉ được "theo dõi" chiến dịch (xem), không được
+  // tạo/sửa/xóa — chỉ Admin và Marketing Staff có manageCampaigns (Mục IV).
+  const canManage = can(user, "manageCampaigns");
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -127,7 +133,9 @@ export default function Campaigns() {
         </div>
         <button
           onClick={() => setShowAdd(true)}
-          className="flex items-center gap-1.5 text-xs bg-brand-600 rounded-lg px-3 py-2 text-white hover:bg-brand-500"
+          disabled={!canManage}
+          title={canManage ? undefined : "Bạn không có quyền tạo chiến dịch"}
+          className="flex items-center gap-1.5 text-xs bg-brand-600 rounded-lg px-3 py-2 text-white hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-brand-600"
         >
           <Plus size={14} /> Tạo chiến dịch
         </button>
@@ -152,7 +160,7 @@ export default function Campaigns() {
             icon={GitBranch}
             title="Chưa có chiến dịch nào"
             description="Tạo chiến dịch đầu tiên để bắt đầu theo dõi hiệu quả nguồn lead và ngân sách."
-            action={{ label: "Tạo chiến dịch", onClick: () => setShowAdd(true) }}
+            action={canManage ? { label: "Tạo chiến dịch", onClick: () => setShowAdd(true) } : undefined}
           />
         </div>
       ) : (
@@ -162,13 +170,15 @@ export default function Campaigns() {
             key={c.id}
             className="relative bg-white border border-slate-200 rounded-xl p-5 shadow-card hover:border-brand-300 hover:shadow-elevated transition-all group"
           >
-            <button
-              onClick={(e) => { e.stopPropagation(); setDeleteTarget(c); }}
-              className="absolute top-4 right-4 p-1.5 rounded-md text-slate-300 hover:bg-red-50 hover:text-red-600 z-10"
-              title="Xóa chiến dịch"
-            >
-              <Trash2 size={14} />
-            </button>
+            {canManage && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setDeleteTarget(c); }}
+                className="absolute top-4 right-4 p-1.5 rounded-md text-slate-300 hover:bg-red-50 hover:text-red-600 z-10"
+                title="Xóa chiến dịch"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
             <button
               onClick={() => navigate(`/campaigns/${c.id}`)}
               className="text-left w-full"
