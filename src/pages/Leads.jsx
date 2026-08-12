@@ -33,11 +33,13 @@ import ConfirmDialog from "../components/ui/ConfirmDialog.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 import { LeadListSkeleton } from "../components/ui/Skeleton.jsx";
 import { useToast } from "../components/ui/ToastProvider.jsx";
-import { statusStyle, leadStatusOrder } from "../data/mockData.js";
-import { fetchLeads, createLead, archiveLead, importLeads, exportLeadsCsv, fetchLeadFilterOptions } from "../services/leadService.js";
+import { statusStyle, leadStatusOrder, courseOptions } from "../data/mockData.js";
+import { fetchLeads, fetchMyLeads, createLead, archiveLead, importLeads, exportLeadsCsv, fetchLeadFilterOptions } from "../services/leadService.js";
 import { validateLeadForm, hasErrors } from "../utils/validators.js";
 import { exportToCsv } from "../utils/exportCsv.js";
 import { importLeadsFromCsv } from "../utils/importCsv.js";
+import { useAuth } from "../context/AuthContext.jsx";
+import { isSales } from "../utils/permissions.js";
 
 const pageSize = 6;
 
@@ -62,6 +64,8 @@ const sortableColumns = [
 export default function Leads() {
   const navigate = useNavigate();
   const toast = useToast();
+  const user = useAuth();
+  const salesView = isSales(user);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState(null);
   const [rows, setRows] = useState([]);
@@ -111,7 +115,11 @@ export default function Leads() {
     let cancelled = false;
     setLoading(true);
     setListError(null);
-    fetchLeads({
+    // Sales/Admissions chỉ được xem lead được phân công cho mình (Mục IV.3) —
+    // dùng đúng endpoint /leads/my thay vì /leads để Back-end tự giới hạn
+    // theo token đăng nhập, không dựa vào tham số assignee do FE tự truyền.
+    const fetchFn = isSales(user) ? fetchMyLeads : fetchLeads;
+    fetchFn({
       query,
       status: statusFilter,
       cls: classFilter,
@@ -128,7 +136,7 @@ export default function Leads() {
       source: advFilters.source,
       assignee: advFilters.assignee,
       campaign: advFilters.campaign,
-    })
+    }, user?.name)
       .then(({ items, total: t }) => {
         if (cancelled) return;
         setRows(items);
@@ -143,7 +151,7 @@ export default function Leads() {
     return () => {
       cancelled = true;
     };
-  }, [query, statusFilter, classFilter, sortKey, sortDir, page, refreshTick, advFilters]);
+  }, [query, statusFilter, classFilter, sortKey, sortDir, page, refreshTick, advFilters, user]);
 
   const emptyForm = {
     // Bắt buộc
@@ -153,6 +161,7 @@ export default function Leads() {
     phone: "",
     email: "",
     // Mở rộng (tùy chọn)
+    campaign: "",
     school: "",
     currentLevel: "",
     studyGoal: "",
@@ -475,19 +484,21 @@ export default function Leads() {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="text-xs text-slate-500 block mb-1">Nhân viên phụ trách</label>
-              <select
-                value={advFiltersDraft.assignee}
-                onChange={(e) => setAdvFiltersDraft({ ...advFiltersDraft, assignee: e.target.value })}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"
-              >
-                <option value="Tất cả">Tất cả</option>
-                {filterOptions.assignees.map((a) => (
-                  <option key={a} value={a}>{a}</option>
-                ))}
-              </select>
-            </div>
+            {!salesView && (
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Nhân viên phụ trách</label>
+                <select
+                  value={advFiltersDraft.assignee}
+                  onChange={(e) => setAdvFiltersDraft({ ...advFiltersDraft, assignee: e.target.value })}
+                  className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"
+                >
+                  <option value="Tất cả">Tất cả</option>
+                  {filterOptions.assignees.map((a) => (
+                    <option key={a} value={a}>{a}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label className="text-xs text-slate-500 block mb-1">Chiến dịch</label>
               <select
@@ -813,12 +824,9 @@ export default function Leads() {
                     }`}
                   >
                     <option value="">Chọn khóa học</option>
-                    <option>Java Backend</option>
-                    <option>ReactJS</option>
-                    <option>Flutter</option>
-                    <option>Business Analyst</option>
-                    <option>Data Analyst</option>
-                    <option>UI/UX Design</option>
+                    {courseOptions.map((c) => (
+                      <option key={c}>{c}</option>
+                    ))}
                   </select>
                   {formErrors.course && <p className="text-[11px] text-red-600 mt-1">{formErrors.course}</p>}
                 </div>
@@ -840,6 +848,20 @@ export default function Leads() {
                   </select>
                   {formErrors.source && <p className="text-[11px] text-red-600 mt-1">{formErrors.source}</p>}
                 </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Chiến dịch (nếu có)</label>
+                <select
+                  value={form.campaign}
+                  onChange={(e) => setForm({ ...form, campaign: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+                >
+                  <option value="">Không thuộc chiến dịch nào</option>
+                  {filterOptions.campaigns.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

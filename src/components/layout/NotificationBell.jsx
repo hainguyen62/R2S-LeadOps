@@ -3,6 +3,9 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Bell, Flame, Clock, Info, UserPlus, CheckCheck, BellOff } from "lucide-react";
 import { notifications as initialNotifications } from "../../data/mockData.js";
+import { useAuth } from "../../context/AuthContext.jsx";
+import { isSales, can } from "../../utils/permissions.js";
+import { fetchLeads, fetchMyLeads } from "../../services/leadService.js";
 import EmptyState from "../ui/EmptyState.jsx";
 
 const typeConfig = {
@@ -12,13 +15,111 @@ const typeConfig = {
   system: { icon: Info, tint: "bg-slate-100 text-slate-500" },
 };
 
+// Trạng thái cuối trong phễu = lead đã "hoàn thành" hành trình chăm sóc,
+// không cần nhắc follow-up nữa dù còn sót nextFollowUpAt cũ (Mục leadStatusOrder).
+const COMPLETED_STATUS = "Đã đăng ký";
+
+const todayKey = () => new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+const storageKeyFor = (user) => `r2s_notifications_${user?.name || "guest"}`;
+
+// Sinh thông báo follow-up từ danh sách lead quá hạn/đến hạn — bỏ qua lead
+// đã hoàn thành (đăng ký) dù còn sót lịch follow-up cũ.
+function buildFollowUpNotifications(leads) {
+  const now = Date.now();
+  return leads
+    .filter((l) => l.status !== COMPLETED_STATUS && l.nextFollowUpAt)
+    .map((l) => {
+      const due = new Date(l.nextFollowUpAt);
+      const isOverdue = due.getTime() <= now;
+      const hours = Math.max(0, Math.round(Math.abs(now - due.getTime()) / 3600000));
+      return {
+        id: `followup-${l.id}`,
+        type: "followup",
+        title: `Follow-up ${isOverdue ? "quá hạn" : "đến hạn"}: ${l.name}`,
+        desc: isOverdue
+          ? `Lịch hẹn gọi lại đã quá hạn ${hours} giờ.`
+          : `Đến hạn liên hệ lại trong ${hours} giờ nữa.`,
+        time: due.toLocaleString("vi-VN"),
+        read: false,
+        leadId: l.id,
+      };
+    });
+}
+
 export default function NotificationBell() {
+  const user = useAuth();
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState(initialNotifications);
+  // Khởi tạo tạm bằng mock tĩnh (loại followup) — sẽ được thay bằng dữ liệu
+  // thật/khôi phục từ localStorage ngay khi effect bên dưới chạy.
+  const [items, setItems] = useState(() => initialNotifications.filter((n) => n.type !== "followup"));
   const [coords, setCoords] = useState({ top: 0, right: 0 });
   const btnRef = useRef(null);
   const panelRef = useRef(null);
   const navigate = useNavigate();
+
+  // ---- Sinh thông báo follow-up theo vai trò, tối đa 1 lần/ngày (Mục chuông thông báo) ----
+  // - Sales: chỉ follow-up của lead do chính mình phụ trách.
+  // - Admin / Leader Marketing (viewAllCareHistory): follow-up của toàn bộ lead.
+  // - Marketing Staff: không tham gia chăm sóc trực tiếp nên không nhận thông báo follow-up.
+  // Kết quả được cache theo ngày trong localStorage để mở lại app cùng ngày
+  // không bị sinh trùng / gửi lại, nhưng vẫn giữ trạng thái đã đọc.
+  useEffect(() => {
+    if (!user) return;
+    const key = storageKeyFor(user);
+    const today = todayKey();
+    let cached = null;
+    try {
+      cached = JSON.parse(localStorage.getItem(key) || "null");
+    } catch {
+      cached = null;
+    }
+
+    if (cached && cached.date === today) {
+      setItems(cached.items);
+      return;
+    }
+
+    const canSeeFollowUps = isSales(user) || can(user, "viewAllCareHistory");
+    const staticItems = initialNotifications.filter((n) => n.type !== "followup");
+
+    if (!canSeeFollowUps) {
+      setItems(staticItems);
+      localStorage.setItem(key, JSON.stringify({ date: today, items: staticItems }));
+      return;
+    }
+
+    let cancelled = false;
+    const fetchFn = isSales(user) ? fetchMyLeads : fetchLeads;
+    fetchFn({ overdueOnly: true, pageSize: 200 }, user.name)
+      .then(({ items: leads }) => {
+        if (cancelled) return;
+        const followUps = buildFollowUpNotifications(leads);
+        const merged = [...followUps, ...staticItems];
+        setItems(merged);
+        localStorage.setItem(key, JSON.stringify({ date: today, items: merged }));
+      })
+      .catch(() => {
+        if (!cancelled) setItems(staticItems);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  // Ghi lại mỗi khi items đổi (đọc/đánh dấu đã đọc) để giữ trạng thái nếu
+  // reload trang trong cùng ngày.
+  useEffect(() => {
+    if (!user) return;
+    const key = storageKeyFor(user);
+    let cached = null;
+    try {
+      cached = JSON.parse(localStorage.getItem(key) || "null");
+    } catch {
+      cached = null;
+    }
+    const date = cached?.date === todayKey() ? cached.date : todayKey();
+    localStorage.setItem(key, JSON.stringify({ date, items }));
+  }, [items, user]);
 
   const unreadCount = items.filter((n) => !n.read).length;
 
@@ -53,7 +154,7 @@ export default function NotificationBell() {
     setItems((list) => list.map((i) => (i.id === n.id ? { ...i, read: true } : i)));
     setOpen(false);
     if (n.leadId) {
-      navigate("/leads");
+      navigate(`/leads/${n.leadId}`);
     }
   };
 

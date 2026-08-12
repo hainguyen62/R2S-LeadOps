@@ -8,7 +8,7 @@ export default function Layout({ user, onLogout, children }) {
 
   return (
     <div className="min-h-screen w-full bg-slate-50 text-slate-800 flex">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} />
       <div className="flex-1 flex min-w-0">
         <main className="flex-1 min-w-0 overflow-x-hidden">
           <Topbar user={user} onLogout={onLogout} sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((v) => !v)} />

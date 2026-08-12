@@ -46,6 +46,21 @@ function getLastInteractionAt(leadId) {
 }
 
 /**
+ * GET /leads/my — chỉ trả về lead được phân công cho người dùng hiện tại.
+ * Dùng cho Sales/Admissions (Mục IV.3: "Xem lead được phân công" — KHÔNG
+ * được xem lead ngoài phạm vi phân công). Nhận cùng params như fetchLeads
+ * (query/status/sort/page...), ngoại trừ `assignee` — endpoint tự suy ra
+ * từ token đăng nhập ở Back-end thật, nên tham số này bị bỏ qua nếu có.
+ */
+export async function fetchMyLeads(params = {}, currentUserName) {
+  if (!USE_MOCK) {
+    const { assignee, ...rest } = params;
+    return apiFetch("/leads/my", { params: rest });
+  }
+  return fetchLeads({ ...params, assignee: currentUserName || "__none__" });
+}
+
+/**
  * GET /api/leads — danh sách lead có tìm kiếm/lọc/sắp xếp/phân trang.
  * params: { query, status, cls, sortKey, sortDir, page, pageSize,
  *           dateFrom, dateTo, scoreMin, scoreMax, overdueOnly,
@@ -242,10 +257,13 @@ export async function createLead(payload) {
       },
     });
   }
-  if (!payload.phone?.trim() && !payload.email?.trim()) {
-    throw new ApiError("Cần ít nhất một trong hai: Số điện thoại hoặc Email.", {
+  if (!payload.phone?.trim() || !payload.email?.trim()) {
+    throw new ApiError("Vui lòng nhập đầy đủ số điện thoại và email.", {
       status: 400,
-      fieldErrors: { contact: "Cần ít nhất một trong hai: Số điện thoại hoặc Email." },
+      fieldErrors: {
+        phone: !payload.phone?.trim() ? "Vui lòng nhập số điện thoại." : undefined,
+        email: !payload.email?.trim() ? "Vui lòng nhập email." : undefined,
+      },
     });
   }
 
@@ -259,6 +277,7 @@ export async function createLead(payload) {
     phone: payload.phone?.trim() || "—",
     email: payload.email?.trim() || "—",
     assignee: payload.assignee || "Tư vấn viên A",
+    campaign: payload.campaign?.trim() || undefined,
     school: payload.school?.trim() || undefined,
     currentLevel: payload.currentLevel || undefined,
     studyGoal: payload.studyGoal?.trim() || undefined,
@@ -356,7 +375,7 @@ export async function fetchAllActivities() {
   if (!USE_MOCK) return apiFetch("/lead-activities");
   await mockDelay(350);
   const rows = mockLeads.flatMap((l) =>
-    (mockCareHistory[l.id] || []).map((h) => ({ ...h, leadName: l.name, initials: l.initials }))
+    (mockCareHistory[l.id] || []).map((h) => ({ ...h, leadId: l.id, leadName: l.name, initials: l.initials, assignee: l.assignee }))
   );
   rows.sort((a, b) => (a.date < b.date ? 1 : -1));
   return clone(rows);

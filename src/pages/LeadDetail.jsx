@@ -10,7 +10,10 @@ import { useToast } from "../components/ui/ToastProvider.jsx";
 import { statusStyle, classStyle, leadStatusOrder } from "../data/mockData.js";
 import { fetchLeadById, fetchLeadActivities, updateLeadStatus, assignLead, addLeadActivity, updateLead, fetchLeadScoreEvents } from "../services/leadService.js";
 import { fetchUsers } from "../services/settingsService.js";
-import { priorityTier, getScoreBreakdown } from "../utils/leadScoring.js";
+import { fetchCampaigns } from "../services/campaignService.js";
+import { priorityTier, getScoreBreakdown, scoreLead, scoringGroups, deductionGroup } from "../utils/leadScoring.js";
+import { useAuth } from "../context/AuthContext.jsx";
+import { isSales, isAdmin, can } from "../utils/permissions.js";
 
 // Loại hoạt động chăm sóc (Module 4 - Mục VI kế hoạch)
 const activityTypes = [
@@ -48,6 +51,8 @@ export default function LeadDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const user = useAuth();
+  const salesView = isSales(user);
   const [lead, setLead] = useState(null);
   const [history, setHistory] = useState([]);
   const [scoreEvents, setScoreEvents] = useState([]);
@@ -55,6 +60,11 @@ export default function LeadDetail() {
   const [error, setError] = useState(null);
   const [statusOpen, setStatusOpen] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+
+  // ---- Chiến dịch nguồn của lead (Mục 6.5) ----
+  // lead.campaign chỉ lưu TÊN chiến dịch, nên cần tra cứu id tương ứng
+  // trong danh sách campaigns để có thể điều hướng sang trang chi tiết.
+  const [campaignMatch, setCampaignMatch] = useState(null);
 
   // ---- Phân công lead (Module 5) ----
   const [assignOpen, setAssignOpen] = useState(false);
@@ -73,6 +83,11 @@ export default function LeadDetail() {
   const [followUpForm, setFollowUpForm] = useState({ datetime: "", note: "" });
   const [savingFollowUp, setSavingFollowUp] = useState(false);
 
+  // ---- Bảng điểm checkbox — chỉnh sửa tín hiệu chấm điểm (Mục 3.3) ----
+  const [scoreFormOpen, setScoreFormOpen] = useState(false);
+  const [draftSignals, setDraftSignals] = useState({});
+  const [savingScore, setSavingScore] = useState(false);
+
   // GET /api/leads/{id} + GET /api/leads/{id}/activities — xem leadService.js
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +96,10 @@ export default function LeadDetail() {
     Promise.all([fetchLeadById(id), fetchLeadActivities(id), fetchLeadScoreEvents(id)])
       .then(([l, h, se]) => {
         if (cancelled) return;
+        if (salesView && l.assignee !== user?.name) {
+          setError("Bạn không có quyền xem lead này (chỉ được phân công cho nhân viên khác).");
+          return;
+        }
         setLead(l);
         setHistory(h);
         setScoreEvents(se);
@@ -94,7 +113,29 @@ export default function LeadDetail() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, salesView, user]);
+
+  // Tra cứu id chiến dịch theo tên (lead.campaign) để hiển thị link sang
+  // CampaignDetails — chỉ tải khi lead có gắn chiến dịch và user có quyền
+  // xem trang Campaign (Sales không có quyền accessCampaignsPage).
+  useEffect(() => {
+    let cancelled = false;
+    if (!lead?.campaign || !can(user, "accessCampaignsPage")) {
+      setCampaignMatch(null);
+      return;
+    }
+    fetchCampaigns()
+      .then((list) => {
+        if (cancelled) return;
+        setCampaignMatch(list.find((c) => c.name === lead.campaign) || null);
+      })
+      .catch(() => {
+        if (!cancelled) setCampaignMatch(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lead?.campaign, user]);
 
   if (loading) {
     return (
@@ -246,6 +287,48 @@ export default function LeadDetail() {
     }
   };
 
+  // Mở bảng điểm checkbox — nạp lại từ lead.signals hiện tại mỗi lần mở,
+  // tránh giữ state cũ từ lần chỉnh trước đó chưa lưu.
+  const openScoreForm = () => {
+    setDraftSignals({ ...(lead.signals || {}) });
+    setScoreFormOpen(true);
+  };
+
+  const toggleSignal = (id) => {
+    setDraftSignals((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const selectEnrollmentIntent = (value) => {
+    setDraftSignals((prev) => ({ ...prev, enrollmentIntent: value }));
+  };
+
+  const draftScore = scoreLead({ signals: draftSignals });
+
+  // PUT /api/leads/{id} — lưu lại toàn bộ tín hiệu chấm điểm đã chỉnh sửa;
+  // Back-end (hoặc mock) tự tính lại score/cls từ signals mới, không tính
+  // điểm ở FE để tránh lệch công thức giữa các nơi (Mục VII.6).
+  const handleSaveScore = async (e) => {
+    e.preventDefault();
+    setSavingScore(true);
+    try {
+      const updated = await updateLead(lead.id, {
+        signals: draftSignals,
+        scoreUpdatedAt: new Date().toLocaleString("vi-VN"),
+      });
+      await addLeadActivity(lead.id, {
+        text: `Cập nhật bảng điểm thủ công — điểm mới: ${updated.score}`,
+        channel: lead.assignee || "Hệ thống",
+      });
+      await refreshLead();
+      toast.success("Đã lưu bảng điểm.");
+      setScoreFormOpen(false);
+    } catch (err) {
+      toast.error(err.message || "Lưu bảng điểm thất bại.");
+    } finally {
+      setSavingScore(false);
+    }
+  };
+
   const breakdown = getScoreBreakdown(lead);
   const tier = priorityTier(lead.score);
   const style = priorityStyles[tier];
@@ -273,6 +356,21 @@ export default function LeadDetail() {
                 <p className="font-semibold text-slate-900 truncate">{lead.name}</p>
                 <div className="mt-1"><Pill text={lead.status} map={statusStyle} /></div>
                 <p className="text-xs text-slate-500 mt-1 truncate">{lead.course} · {lead.source}</p>
+                {lead.campaign && (
+                  <p className="text-xs text-slate-500 mt-0.5 truncate">
+                    Chiến dịch:{" "}
+                    {campaignMatch ? (
+                      <button
+                        onClick={() => navigate(`/campaigns/${campaignMatch.id}`)}
+                        className="text-brand-600 hover:text-brand-700 hover:underline font-medium"
+                      >
+                        {lead.campaign}
+                      </button>
+                    ) : (
+                      <span className="text-slate-700 font-medium">{lead.campaign}</span>
+                    )}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -291,13 +389,15 @@ export default function LeadDetail() {
                   <span className="text-slate-500">Người phụ trách</span>
                   <span className="flex items-center gap-1.5">
                     <span className="text-slate-800">{lead.assignee || "Chưa phân công"}</span>
-                    <button
-                      onClick={openAssignModal}
-                      title="Phân công / chuyển người phụ trách"
-                      className="text-brand-600 hover:text-brand-700 shrink-0"
-                    >
-                      <Users size={13} />
-                    </button>
+                    {can(user, "assignLeads") && (
+                      <button
+                        onClick={openAssignModal}
+                        title="Phân công / chuyển người phụ trách"
+                        className="text-brand-600 hover:text-brand-700 shrink-0"
+                      >
+                        <Users size={13} />
+                      </button>
+                    )}
                   </span>
                 </div>
                 <div className="flex justify-between gap-3">
@@ -341,6 +441,15 @@ export default function LeadDetail() {
               </div>
               <Pill text={lead.cls} map={classStyle} />
             </div>
+
+            {(can(user, "editLeadCare") || isAdmin(user)) && (
+              <button
+                onClick={openScoreForm}
+                className="flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700"
+              >
+                <PlusCircle size={13} /> Chỉnh sửa bảng điểm
+              </button>
+            )}
 
             {lead.scoreUpdatedAt && (
               <p className="flex items-center gap-1 text-[11px] text-slate-400">
@@ -642,6 +751,114 @@ export default function LeadDetail() {
                 >
                   {savingFollowUp && <Loader2 size={14} className="animate-spin" />}
                   {savingFollowUp ? "Đang lưu..." : "Lưu lịch follow-up"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* ---- Modal: Chỉnh sửa bảng điểm (checkbox theo tín hiệu — Mục 3.3) ---- */}
+      {scoreFormOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-lg shadow-elevated max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 pt-6 pb-2 shrink-0">
+              <h3 className="font-semibold text-slate-900">Chỉnh sửa bảng điểm</h3>
+              <button onClick={() => setScoreFormOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveScore} className="px-6 pb-6 flex flex-col min-h-0 flex-1">
+              <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 mb-4 shrink-0">
+                <span className="text-xs text-slate-500">Tổng điểm dự kiến</span>
+                <span className="text-xl font-semibold text-slate-900">{draftScore}đ</span>
+              </div>
+
+              <div className="overflow-y-auto pr-1 space-y-4">
+                {scoringGroups.map((group) => (
+                  <div key={group.id} className="border-t border-slate-100 pt-3 first:border-t-0 first:pt-0">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                      {group.name} <span className="text-slate-400 font-normal normal-case">(tối đa {group.max}đ)</span>
+                    </p>
+                    {group.singleSelect ? (
+                      <div className="space-y-1.5">
+                        {group.options.map((opt) => (
+                          <label key={opt.value} className="flex items-center justify-between gap-3 text-sm cursor-pointer">
+                            <span className="flex items-center gap-2 text-slate-700">
+                              <input
+                                type="radio"
+                                name="enrollmentIntent"
+                                checked={draftSignals.enrollmentIntent === opt.value}
+                                onChange={() => selectEnrollmentIntent(opt.value)}
+                                className="accent-brand-600"
+                              />
+                              {opt.label}
+                            </span>
+                            <span className={opt.points < 0 ? "text-red-600 text-xs font-medium" : "text-emerald-600 text-xs font-medium"}>
+                              {opt.points > 0 ? "+" : ""}{opt.points}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {group.criteria.map((c) => (
+                          <label key={c.id} className="flex items-center justify-between gap-3 text-sm cursor-pointer">
+                            <span className="flex items-center gap-2 text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={!!draftSignals[c.id]}
+                                onChange={() => toggleSignal(c.id)}
+                                className="accent-brand-600"
+                              />
+                              {c.label}
+                            </span>
+                            <span className="text-emerald-600 text-xs font-medium">+{c.points}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                <div className="border-t border-slate-100 pt-3">
+                  <p className="text-xs font-semibold text-red-500 uppercase tracking-wide mb-2">
+                    {deductionGroup.name}
+                  </p>
+                  <div className="space-y-1.5">
+                    {deductionGroup.criteria.map((c) => (
+                      <label key={c.id} className="flex items-center justify-between gap-3 text-sm cursor-pointer">
+                        <span className="flex items-center gap-2 text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={!!draftSignals[c.id]}
+                            onChange={() => toggleSignal(c.id)}
+                            className="accent-red-600"
+                          />
+                          {c.label}
+                        </span>
+                        <span className="text-red-600 text-xs font-medium">{c.points}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-4 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setScoreFormOpen(false)}
+                  className="flex-1 border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingScore}
+                  className="flex-1 bg-brand-600 hover:bg-brand-500 rounded-lg py-2 text-sm text-white disabled:opacity-60 inline-flex items-center justify-center gap-1.5"
+                >
+                  {savingScore && <Loader2 size={14} className="animate-spin" />}
+                  {savingScore ? "Đang lưu..." : "Lưu bảng điểm"}
                 </button>
               </div>
             </form>

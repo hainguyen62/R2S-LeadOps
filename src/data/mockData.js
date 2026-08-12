@@ -5,6 +5,19 @@
 
 import { scoreLead, classify } from "../utils/leadScoring.js";
 
+// Danh sách khóa học dùng chung cho toàn app (form Lead, form Campaign...).
+// 4 khóa đầu khớp dữ liệu ban đầu ở Mục IX (courses); 2 khóa sau đã được
+// dùng sẵn trong UI trước đó nên giữ lại để không phá dữ liệu demo cũ.
+export const courseOptions = [
+  "Java Backend",
+  "ReactJS",
+  "Flutter",
+  "Business Analyst",
+  "Data Analyst",
+  "UI/UX Design",
+];
+
+
 // Sinh mốc thời gian follow-up TƯƠNG ĐỐI so với "hôm nay" thật (new Date()),
 // thay vì hardcode ngày cố định — tránh lặp lại lỗi lệch "đồng hồ" giữa các
 // khối mock data (đã gặp ở phần biểu đồ Dashboard). offsetDays âm = quá khứ
@@ -408,6 +421,7 @@ export const users = [
   { id: 3, name: "Tư vấn viên C", role: "Sales/Admissions", email: "tvc@r2s.edu.vn", status: "Hoạt động" },
   { id: 4, name: "Leader Marketing", role: "Leader Marketing", email: "marketing@r2s.edu.vn", status: "Hoạt động" },
   { id: 5, name: "Admin", role: "Administrator", email: "admin@r2s.edu.vn", status: "Hoạt động" },
+  { id: 6, name: "Marketing Staff", role: "Marketing Staff", email: "staff.marketing@r2s.edu.vn", status: "Hoạt động" },
 ];
 
 // Người dùng hiện đang đăng nhập (demo) — dùng cho trang Profile

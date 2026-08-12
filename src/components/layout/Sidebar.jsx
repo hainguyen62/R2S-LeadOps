@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { navItems } from "../../data/mockData.js";
+import { canAccessPath } from "../../utils/permissions.js";
 
 const iconMap = {
   LayoutDashboard,
@@ -19,7 +20,12 @@ const iconMap = {
   Settings,
 };
 
-export default function Sidebar({ open = false, onClose }) {
+export default function Sidebar({ open = false, onClose, user }) {
+  // Chỉ hiện các mục menu mà vai trò hiện tại được phép truy cập (Mục IV) —
+  // route guard ở App.jsx (RequireAccess) đã chặn cả khi gõ URL trực tiếp,
+  // đây là lớp ẩn UI tương ứng để không hiện link dẫn tới trang bị chặn.
+  const visibleItems = navItems.filter((item) => canAccessPath(user, item.path));
+
   return (
     <>
       {/* Overlay tối phía sau sidebar — chỉ hiện trên mobile khi sidebar đang mở */}
@@ -56,7 +62,7 @@ export default function Sidebar({ open = false, onClose }) {
           </button>
         </div>
         <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto w-60">
-          {navItems.map((item) => {
+          {visibleItems.map((item) => {
             const Icon = iconMap[item.icon] || Users;
             return (
               <NavLink

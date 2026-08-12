@@ -35,6 +35,42 @@ const tooltipStyle = {
   padding: "8px 12px",
 };
 
+// Các lựa chọn khoảng thời gian cho biểu đồ xu hướng (Mục 6.4).
+// value: null = "Toàn bộ" (không lọc); số = số ngày tính lùi từ điểm dữ liệu gần nhất.
+const TREND_RANGES = [
+  { value: 7, label: "7 ngày gần nhất" },
+  { value: 30, label: "30 ngày gần nhất" },
+  { value: 90, label: "90 ngày gần nhất" },
+  { value: null, label: "Toàn bộ" },
+];
+
+/**
+ * Dữ liệu mock chỉ có "day" dạng "dd/mm" (không có năm), nên không thể so
+ * với ngày hệ thống thực tế một cách đáng tin cậy. Để lọc theo khoảng thời
+ * gian vẫn hoạt động đúng dù mock là dữ liệu quá khứ/tương lai so với hôm
+ * nay, ta quy ước mốc "hiện tại" = điểm dữ liệu gần nhất trong chính chuỗi
+ * xu hướng, rồi lọc lùi N ngày từ đó. Khi có Back-end thật trả về ngày đầy
+ * đủ (yyyy-mm-dd), có thể thay hàm này bằng so sánh Date thật.
+ */
+function parseTrendDay(day) {
+  const [d, m] = day.split("/").map(Number);
+  if (!d || !m) return null;
+  // Năm cố định giả lập chỉ để tính khoảng cách ngày tương đối giữa các điểm.
+  return new Date(2000, m - 1, d);
+}
+
+function filterTrendByRange(trend, rangeDays) {
+  if (!rangeDays || trend.length === 0) return trend;
+  const parsed = trend
+    .map((point) => ({ ...point, _date: parseTrendDay(point.day) }))
+    .filter((point) => point._date);
+  if (parsed.length === 0) return trend;
+  const latest = parsed.reduce((max, p) => (p._date > max ? p._date : max), parsed[0]._date);
+  const cutoff = new Date(latest);
+  cutoff.setDate(cutoff.getDate() - rangeDays);
+  return parsed.filter((p) => p._date >= cutoff).map(({ _date, ...rest }) => rest);
+}
+
 export default function CampaignDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -45,6 +81,7 @@ export default function CampaignDetails() {
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState("");
+  const [trendRange, setTrendRange] = useState(30); // mặc định 30 ngày gần nhất (Mục 6.4)
 
   // GET /api/campaigns/{id} + xu hướng lead — xem services/campaignService.js
   useEffect(() => {
@@ -86,6 +123,8 @@ export default function CampaignDetails() {
     if (!campaign || !campaign.leads) return "0%";
     return `${Math.round((campaign.registrations / campaign.leads) * 100)}%`;
   }, [campaign]);
+
+  const filteredTrend = useMemo(() => filterTrendByRange(trend, trendRange), [trend, trendRange]);
 
   if (loading) {
     return (
@@ -344,9 +383,25 @@ export default function CampaignDetails() {
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-card">
-            <p className="text-sm font-semibold text-slate-900 mb-4">Xu hướng lead theo thời gian</p>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm font-semibold text-slate-900">Xu hướng lead theo thời gian</p>
+              <select
+                value={trendRange ?? "all"}
+                onChange={(e) => setTrendRange(e.target.value === "all" ? null : Number(e.target.value))}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              >
+                {TREND_RANGES.map((r) => (
+                  <option key={r.label} value={r.value ?? "all"}>{r.label}</option>
+                ))}
+              </select>
+            </div>
+            {filteredTrend.length === 0 ? (
+              <div className="h-[240px] flex items-center justify-center text-sm text-slate-400">
+                Không có dữ liệu trong khoảng thời gian này.
+              </div>
+            ) : (
             <ResponsiveContainer width="100%" height={240}>
-              <AreaChart data={trend} margin={{ left: -20, right: 10, top: 10 }}>
+              <AreaChart data={filteredTrend} margin={{ left: -20, right: 10, top: 10 }}>
                 <defs>
                   <linearGradient id="campaignTrendArea" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#2563EB" stopOpacity={0.15} />
@@ -370,6 +425,7 @@ export default function CampaignDetails() {
                 />
               </AreaChart>
             </ResponsiveContainer>
+            )}
           </div>
         </div>
       </div>
