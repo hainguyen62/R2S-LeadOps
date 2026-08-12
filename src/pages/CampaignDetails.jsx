@@ -28,6 +28,7 @@ import { SkeletonBlock } from "../components/ui/Skeleton.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 import Pill from "../components/ui/Pill.jsx";
 import { statusStyle } from "../data/mockData.js";
+import LeadListModal from "../components/dashboard/LeadListModal.jsx";
 
 const tooltipStyle = {
   background: "#ffffff",
@@ -97,6 +98,9 @@ export default function CampaignDetails() {
   // ---- Drill-down từ biểu đồ xu hướng: click 1 ngày -> xem lead phát sinh ngày đó ----
   const [campaignLeads, setCampaignLeads] = useState([]);
   const [drillDay, setDrillDay] = useState(null); // "dd/mm" đang được xem chi tiết, null = đóng modal
+  // KPI đang được xem chi tiết dạng danh sách lead (click vào 1 trong 4 thẻ
+  // Số lead / Lead nóng / Đã đặt cọc / Đã đăng ký) — giống hành vi Dashboard.
+  const [kpiDrill, setKpiDrill] = useState(null); // { title, filters }
 
   // GET /api/campaigns/{id} + xu hướng lead — xem services/campaignService.js
   useEffect(() => {
@@ -226,10 +230,10 @@ export default function CampaignDetails() {
   };
 
   const statCards = [
-    { label: "Số lead", value: campaign.leads, icon: Users, tint: "bg-blue-50 text-blue-600" },
-    { label: "Lead nóng", value: campaign.hotLeads, icon: Flame, tint: "bg-orange-50 text-orange-600" },
-    { label: "Đã đặt cọc", value: campaign.deposits, icon: Wallet, tint: "bg-violet-50 text-violet-600" },
-    { label: "Đã đăng ký", value: campaign.registrations, icon: GraduationCap, tint: "bg-emerald-50 text-emerald-600" },
+    { key: "leads", label: "Số lead", value: campaign.leads, icon: Users, tint: "bg-blue-50 text-blue-600", filters: { campaign: campaign.name } },
+    { key: "hot", label: "Lead nóng", value: campaign.hotLeads, icon: Flame, tint: "bg-orange-50 text-orange-600", filters: { campaign: campaign.name, cls: "Lead nóng" } },
+    { key: "deposits", label: "Đã đặt cọc", value: campaign.deposits, icon: Wallet, tint: "bg-violet-50 text-violet-600", filters: { campaign: campaign.name, status: "Đã đặt cọc" } },
+    { key: "registrations", label: "Đã đăng ký", value: campaign.registrations, icon: GraduationCap, tint: "bg-emerald-50 text-emerald-600", filters: { campaign: campaign.name, status: "Đã đăng ký" } },
   ];
 
   return (
@@ -402,13 +406,18 @@ export default function CampaignDetails() {
             {statCards.map((s) => {
               const Icon = s.icon;
               return (
-                <div key={s.label} className="bg-white border border-slate-200 rounded-xl p-4 shadow-card">
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => setKpiDrill({ title: `${s.label} · ${campaign.name}`, filters: s.filters })}
+                  className="text-left bg-white border border-slate-200 rounded-xl p-4 shadow-card hover:border-brand-300 hover:shadow-elevated transition-all"
+                >
                   <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-2 ${s.tint}`}>
                     <Icon size={16} />
                   </div>
                   <p className="text-xl font-semibold text-slate-900">{s.value}</p>
                   <p className="text-[11px] text-slate-500">{s.label}</p>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -516,6 +525,10 @@ export default function CampaignDetails() {
             </div>
           </div>
         </div>
+      )}
+      {/* ---- Modal drill-down KPI: click 1 thẻ số liệu -> xem danh sách lead tương ứng ---- */}
+      {kpiDrill && (
+        <LeadListModal title={kpiDrill.title} filters={kpiDrill.filters} onClose={() => setKpiDrill(null)} />
       )}
     </div>
   );
