@@ -6,6 +6,8 @@ import { notifications as initialNotifications } from "../../data/mockData.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { isSales, can } from "../../utils/permissions.js";
 import { fetchLeads, fetchMyLeads } from "../../services/leadService.js";
+import { USE_MOCK } from "../../services/apiClient.js";
+import { fetchNotifications, fetchUnreadCount, markNotificationRead, markAllNotificationsRead } from "../../services/notificationService.js";
 import EmptyState from "../ui/EmptyState.jsx";
 
 const typeConfig = {
@@ -53,9 +55,19 @@ export default function NotificationBell() {
   // thật/khôi phục từ localStorage ngay khi effect bên dưới chạy.
   const [items, setItems] = useState(() => initialNotifications.filter((n) => n.type !== "followup"));
   const [coords, setCoords] = useState({ top: 0, right: 0 });
+  // Số chưa đọc lấy riêng từ GET /notifications/unread-count (tính trên TOÀN BỘ
+  // notification phía server, không chỉ trang đã tải) — chỉ áp dụng khi có API thật.
+  const [serverUnreadCount, setServerUnreadCount] = useState(null);
   const btnRef = useRef(null);
   const panelRef = useRef(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!user || USE_MOCK) return;
+    fetchUnreadCount()
+      .then(setServerUnreadCount)
+      .catch(() => setServerUnreadCount(null));
+  }, [user]);
 
   // ---- Sinh thông báo follow-up theo vai trò, tối đa 1 lần/ngày (Mục chuông thông báo) ----
   // - Sales: chỉ follow-up của lead do chính mình phụ trách.
@@ -80,27 +92,32 @@ export default function NotificationBell() {
     }
 
     const canSeeFollowUps = isSales(user) || can(user, "viewAllCareHistory");
-    const staticItems = initialNotifications.filter((n) => n.type !== "followup");
-
-    if (!canSeeFollowUps) {
-      setItems(staticItems);
-      localStorage.setItem(key, JSON.stringify({ date: today, items: staticItems }));
-      return;
-    }
 
     let cancelled = false;
-    const fetchFn = isSales(user) ? fetchMyLeads : fetchLeads;
-    fetchFn({ overdueOnly: true, pageSize: 200 }, user.name)
-      .then(({ items: leads }) => {
-        if (cancelled) return;
-        const followUps = buildFollowUpNotifications(leads);
-        const merged = [...followUps, ...staticItems];
-        setItems(merged);
-        localStorage.setItem(key, JSON.stringify({ date: today, items: merged }));
-      })
-      .catch(() => {
-        if (!cancelled) setItems(staticItems);
-      });
+    const staticItemsPromise = USE_MOCK
+      ? Promise.resolve(initialNotifications.filter((n) => n.type !== "followup"))
+      : fetchNotifications({ pageSize: 30 }).catch(() => []);
+
+    staticItemsPromise.then((staticItems) => {
+      if (cancelled) return;
+      if (!canSeeFollowUps) {
+        setItems(staticItems);
+        localStorage.setItem(key, JSON.stringify({ date: today, items: staticItems }));
+        return;
+      }
+      const fetchFn = isSales(user) ? fetchMyLeads : fetchLeads;
+      fetchFn({ overdueOnly: true, pageSize: 200 }, user.name)
+        .then(({ items: leads }) => {
+          if (cancelled) return;
+          const followUps = buildFollowUpNotifications(leads);
+          const merged = [...followUps, ...staticItems];
+          setItems(merged);
+          localStorage.setItem(key, JSON.stringify({ date: today, items: merged }));
+        })
+        .catch(() => {
+          if (!cancelled) setItems(staticItems);
+        });
+    });
     return () => {
       cancelled = true;
     };
@@ -121,7 +138,8 @@ export default function NotificationBell() {
     localStorage.setItem(key, JSON.stringify({ date, items }));
   }, [items, user]);
 
-  const unreadCount = items.filter((n) => !n.read).length;
+  const followUpUnread = items.filter((n) => n.type === "followup" && !n.read).length;
+  const unreadCount = !USE_MOCK && serverUnreadCount !== null ? serverUnreadCount + followUpUnread : items.filter((n) => !n.read).length;
 
   // Tính vị trí panel dựa theo nút chuông, để panel render qua Portal
   // (gắn thẳng vào <body>) không bị bất kỳ vùng nội dung nào (biểu đồ,
@@ -148,10 +166,21 @@ export default function NotificationBell() {
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
-  const markAllRead = () => setItems((list) => list.map((n) => ({ ...n, read: true })));
+  const markAllRead = () => {
+    setItems((list) => list.map((n) => ({ ...n, read: true })));
+    if (!USE_MOCK) {
+      markAllNotificationsRead().catch(() => {});
+      setServerUnreadCount(0);
+    }
+  };
 
   const handleClickItem = (n) => {
+    const wasUnread = !n.read;
     setItems((list) => list.map((i) => (i.id === n.id ? { ...i, read: true } : i)));
+    if (!USE_MOCK && typeof n.id === "number") {
+      markNotificationRead(n.id).catch(() => {});
+      if (wasUnread) setServerUnreadCount((c) => (c === null ? c : Math.max(0, c - 1)));
+    }
     setOpen(false);
     if (n.leadId) {
       navigate(`/leads/${n.leadId}`);

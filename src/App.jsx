@@ -17,6 +17,7 @@ import History from "./pages/History.jsx";
 import Reports from "./pages/Reports.jsx";
 import Settings from "./pages/Settings.jsx";
 import Profile from "./pages/Profile.jsx";
+import MyAppointments from "./pages/MyAppointments.jsx";
 import Consultation from "./pages/Consultation.jsx";
 
 /**
@@ -74,6 +75,7 @@ export default function App() {
           <Route path="/reports" element={<RequireAccess><Reports /></RequireAccess>} />
           <Route path="/settings" element={<RequireAccess><Settings /></RequireAccess>} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/appointments" element={<MyAppointments />} />
           <Route path="*" element={<Navigate to={getHomePath(user)} replace />} />
         </Routes>
       </Layout>

@@ -137,6 +137,7 @@ export function getHomePath(user) {
 export const PAGE_ACCESS = {
   "/": "accessDashboardPage",
   "/leads": true, // ai đăng nhập cũng xem được (dữ liệu tự lọc theo vai trò bên trong)
+  "/appointments": true, // "Lịch hẹn của tôi" — backend tự lọc theo user đăng nhập (JWT)
   "/campaigns": "accessCampaignsPage",
   "/history": "accessHistoryPage",
   "/reports": "accessReportsPage",

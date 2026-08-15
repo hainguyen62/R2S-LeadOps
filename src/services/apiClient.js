@@ -7,7 +7,9 @@
    các hàm trong services/*.js, không import mockData trực tiếp.
    ============================================================ */
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api";
+// Server thật khai báo base path "/api/v1" (xem "servers" trong OpenAPI spec
+// của TTS2), KHÔNG phải "/api" như bản nháp ban đầu.
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api/v1";
 
 // Khi true (mặc định lúc chưa có Back-end): mọi service dùng mock data
 // + độ trễ giả lập. Khi Back-end sẵn sàng, đổi VITE_USE_MOCK=false trong .env.
@@ -79,7 +81,9 @@ export async function apiFetch(path, { method = "GET", body, params, signal } = 
     throw new ApiError(message, {
       status: res.status,
       code: data?.code,
-      fieldErrors: data?.fieldErrors || data?.errors || null,
+      // ErrorResponse thật (theo OpenAPI spec) không có field "fieldErrors"/"errors"
+      // riêng — lỗi validate từng field nằm trong "details" (object tự do).
+      fieldErrors: data?.details || null,
     });
   }
 
@@ -102,6 +106,32 @@ function defaultMessageForStatus(status) {
     default:
       return "Có lỗi xảy ra từ máy chủ. Vui lòng thử lại sau.";
   }
+}
+
+/**
+ * Quy đổi tham số phân trang phía UI (page bắt đầu từ 1) sang tham số
+ * query mà backend Spring Data mong đợi (page bắt đầu từ 0).
+ */
+export function toBackendPaging(page = 1, pageSize = 10) {
+  return { page: Math.max(0, Number(page) - 1), size: Number(pageSize) };
+}
+
+/**
+ * Chuẩn hoá response phân trang kiểu Spring Data (PageXxxResponse):
+ * { content: [...], page: { page, size, totalElements, totalPages, first, last } }
+ * thành { items, total, page, pageSize, totalPages } — page trả ra vẫn tính từ 1
+ * để khớp phần còn lại của UI (component phân trang hiện có).
+ */
+export function unwrapPage(pageResponse) {
+  const content = pageResponse?.content || [];
+  const meta = pageResponse?.page || {};
+  return {
+    items: content,
+    total: meta.totalElements ?? content.length,
+    page: (meta.page ?? 0) + 1,
+    pageSize: meta.size ?? content.length,
+    totalPages: meta.totalPages ?? 1,
+  };
 }
 
 /** Dùng trong các service mock để giả lập độ trễ mạng ~300-700ms. */

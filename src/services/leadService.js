@@ -8,10 +8,149 @@
    dưới sẽ tự chuyển sang gọi apiFetch() thật — không cần sửa UI.
    ============================================================ */
 
-import { apiFetch, USE_MOCK, mockDelay, ApiError } from "./apiClient.js";
+import { apiFetch, USE_MOCK, mockDelay, ApiError, toBackendPaging, unwrapPage } from "./apiClient.js";
 import { leads as mockLeads, careHistory as mockCareHistory } from "../data/mockData.js";
 import { scoreLead, classify, getScoreBreakdown, getScoreHistory, scoringGroups, deductionGroup } from "../utils/leadScoring.js";
 import { normalizePhone, normalizeEmail } from "../utils/validators.js";
+
+/* ------------------------------------------------------------
+   Enum thật của backend (theo OpenAPI spec TTS2 gửi) — dùng khi
+   USE_MOCK=false, thay cho chuỗi tiếng Việt tự do bên mock.
+   ------------------------------------------------------------ */
+export const LEAD_SOURCE_ENUM = ["FACEBOOK", "INSTAGRAM", "LANDING_PAGE", "GOOGLE_FORM", "ZALO", "WEBSITE", "REFERRAL", "OTHER"];
+export const LEAD_STAGE_ENUM = ["NEW", "NURTURE", "WARM", "HOT", "SALE", "WON", "LOST"];
+export const ACTIVITY_TYPE_ENUM = ["CALL", "MESSAGE", "EMAIL", "ZALO", "MEETING", "NOTE", "FOLLOW_UP", "CONSULTATION"];
+export const ACTIVITY_RESULT_ENUM = ["CONNECTED", "NO_ANSWER", "INTERESTED", "NOT_INTERESTED", "CALLBACK", "SUCCESS", "FAILED", "OTHER"];
+
+// Nguồn lead: UI hiện chọn theo nhãn tiếng Việt/tên nguồn tự do, backend chỉ
+// nhận đúng 8 giá trị enum ở trên. "TikTok" chưa có enum tương ứng — tạm map
+// sang OTHER, cần TTS2 xác nhận có bổ sung enum riêng hay không.
+const SOURCE_LABEL_TO_ENUM = {
+  Facebook: "FACEBOOK",
+  TikTok: "OTHER",
+  "Landing Page": "LANDING_PAGE",
+  "Google Form": "GOOGLE_FORM",
+};
+function toLeadSourceEnum(label) {
+  return SOURCE_LABEL_TO_ENUM[label] || (LEAD_SOURCE_ENUM.includes(label) ? label : "OTHER");
+}
+
+/**
+ * payload dạng UI hiện tại (name, phone, email, source, campaign, studyGoal...)
+ * -> đúng field của CreateLeadRequest bên backend. Các field UI có mà backend
+ * không có (course, status, assignee, school, city) sẽ không được gửi lên,
+ * vì spec hiện tại không có chỗ lưu — cần trao đổi thêm với TTS2 nếu bắt buộc.
+ */
+function toCreateLeadRequest(payload) {
+  return {
+    fullName: payload.name?.trim(),
+    phone: payload.phone?.trim(),
+    email: payload.email?.trim() || undefined,
+    leadSource: payload.source ? toLeadSourceEnum(payload.source) : undefined,
+    campaignCode: payload.campaign?.trim() || undefined,
+    currentLevel: payload.currentLevel || undefined,
+    careerGoal: payload.studyGoal?.trim() || undefined,
+    painPoint: payload.note?.trim() || undefined,
+    startTimeline: payload.expectedEnrollment || undefined,
+    preferredChannel: payload.preferredContactTime || undefined,
+  };
+}
+
+/** payload UI -> đúng field của UpdateLeadRequest (chỉ các field backend cho sửa). */
+function toUpdateLeadRequest(payload) {
+  return {
+    fullName: payload.name?.trim() || undefined,
+    phone: payload.phone?.trim() || undefined,
+    email: payload.email?.trim() || undefined,
+    currentLevel: payload.currentLevel || undefined,
+    careerGoal: payload.studyGoal?.trim() || undefined,
+    painPoint: payload.note?.trim() || undefined,
+    startTimeline: payload.expectedEnrollment || undefined,
+    preferredChannel: payload.preferredContactTime || undefined,
+    doNotContact: typeof payload.doNotContact === "boolean" ? payload.doNotContact : undefined,
+  };
+}
+
+/** Backend chưa có endpoint tương ứng trong spec hiện tại — báo lỗi rõ ràng thay vì gọi sai path. */
+function notSupportedByBackend(featureName) {
+  throw new ApiError(`Backend chưa có API cho "${featureName}" trong bản spec hiện tại. Cần trao đổi thêm với TTS2.`, {
+    status: 501,
+    code: "NOT_IMPLEMENTED_BY_BACKEND",
+  });
+}
+
+const STAGE_TO_STATUS = {
+  NEW: "Lead mới",
+  NURTURE: "Đã liên hệ",
+  WARM: "Đang tư vấn",
+  HOT: "Đang cân nhắc",
+  SALE: "Đã đặt cọc",
+  WON: "Đã đăng ký",
+  LOST: "Đã đăng ký", // LOST không có status tương ứng trong leadStatusOrder, tạm gộp — cần TTS2 xác nhận
+};
+const SOURCE_ENUM_TO_LABEL = {
+  FACEBOOK: "Facebook",
+  INSTAGRAM: "Instagram",
+  LANDING_PAGE: "Landing Page",
+  GOOGLE_FORM: "Google Form",
+  ZALO: "Zalo",
+  WEBSITE: "Website",
+  REFERRAL: "Giới thiệu",
+  OTHER: "Khác",
+};
+
+function toVnDateTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** LeadResponse (backend) -> đúng field UI hiện đang dùng (name, status, score, cls...). */
+export function mapLeadResponseToUi(lead) {
+  if (!lead) return lead;
+  const score = lead.totalScore ?? 0;
+  return {
+    id: lead.id,
+    name: lead.fullName,
+    course: lead.careerGoal || "",
+    source: SOURCE_ENUM_TO_LABEL[lead.leadSource] || lead.leadSource,
+    status: STAGE_TO_STATUS[lead.leadStage] || lead.leadStage,
+    score,
+    cls: classify(score, {}),
+    date: toVnDateTime(lead.createdAt),
+    phone: lead.phone,
+    email: lead.email,
+    assignee: lead.ownerName || undefined,
+    ownerId: lead.ownerId ?? undefined,
+    campaign: lead.campaignCode || undefined,
+    currentLevel: lead.currentLevel || undefined,
+    studyGoal: lead.careerGoal || undefined,
+    expectedEnrollment: lead.startTimeline || undefined,
+    preferredContactTime: lead.preferredChannel || undefined,
+    note: lead.painPoint || undefined,
+    initials: toInitials(lead.fullName),
+    archived: !!lead.doNotContact,
+    nextFollowUpAt: lead.nextActionAt || null,
+    scoreUpdatedAt: toVnDateTime(lead.updatedAt),
+    signals: {}, // backend không expose breakdown điểm theo từng tiêu chí (nhóm A-E)
+  };
+}
+
+const STATUS_TO_STAGE = {
+  "Lead mới": "NEW",
+  "Đã liên hệ": "NURTURE",
+  "Đang tư vấn": "WARM",
+  "Đang cân nhắc": "HOT",
+  "Đã đặt cọc": "SALE",
+  "Đã đăng ký": "WON",
+};
+
+/** ActivityResponse (backend) -> đúng field UI đang dùng ở History.jsx/LeadDetail.jsx (text, channel, date). */
+function mapActivityResponseToUi(a) {
+  if (!a) return a;
+  return { text: a.content, channel: a.createdByName || "Hệ thống", date: toVnDateTime(a.createdAt) };
+}
 
 // So khớp id nới lỏng: id trong mockData là number, nhưng id lấy từ URL
 // (useParams của React Router) luôn là string — "8" phải khớp với 8.
@@ -54,8 +193,17 @@ function getLastInteractionAt(leadId) {
  */
 export async function fetchMyLeads(params = {}, currentUserName) {
   if (!USE_MOCK) {
-    const { assignee, ...rest } = params;
-    return apiFetch("/leads/my", { params: rest });
+    const { page, pageSize, query, scoreMin, scoreMax } = params;
+    const res = await apiFetch("/leads/my", {
+      params: {
+        search: query || undefined,
+        minScore: scoreMin,
+        maxScore: scoreMax,
+        ...toBackendPaging(page, pageSize),
+      },
+    });
+    const { items, ...rest } = unwrapPage(res);
+    return { items: items.map(mapLeadResponseToUi), ...rest };
   }
   return fetchLeads({ ...params, assignee: currentUserName || "__none__" });
 }
@@ -71,7 +219,21 @@ export async function fetchMyLeads(params = {}, currentUserName) {
  */
 export async function fetchLeads(params = {}) {
   if (!USE_MOCK) {
-    return apiFetch("/leads", { params });
+    const { query, status, page, pageSize, scoreMin, scoreMax, source, campaign, ownerId } = params;
+    const res = await apiFetch("/leads", {
+      params: {
+        search: query || undefined,
+        stage: status && status !== "Tất cả" ? STATUS_TO_STAGE[status] || status : undefined,
+        source: source && source !== "Tất cả" ? toLeadSourceEnum(source) : undefined,
+        campaignId: campaign && campaign !== "Tất cả" ? campaign : undefined, // backend lọc theo campaignId (số), không phải mã chiến dịch dạng chuỗi — cần map lại khi có API campaign
+        ownerId: ownerId || undefined, // UI hiện lọc theo tên nhân viên (assignee); cần đổi sang chọn theo ownerId để lọc được ở backend thật
+        minScore: scoreMin,
+        maxScore: scoreMax,
+        ...toBackendPaging(page, pageSize),
+      },
+    });
+    const { items, ...rest } = unwrapPage(res);
+    return { items: items.map(mapLeadResponseToUi), ...rest };
   }
 
   await mockDelay();
@@ -178,7 +340,7 @@ function getSortValue(l, key) {
  * hiện tại, để bộ lọc luôn đầy đủ lựa chọn dù đang ở trang nào / đã lọc gì.
  */
 export async function fetchLeadFilterOptions() {
-  if (!USE_MOCK) return apiFetch("/leads/filter-options");
+  if (!USE_MOCK) return notSupportedByBackend("danh sách giá trị lọc (filter-options)");
   await mockDelay(100);
   const active = mockLeads.filter((l) => !l.archived);
   const courses = [...new Set(active.map((l) => l.course).filter(Boolean))].sort();
@@ -200,7 +362,11 @@ export async function fetchLeadFilterOptions() {
  * Khi có Back-end thật, đổi sang POST /api/leads/import (multipart hoặc JSON array).
  */
 export async function importLeads(parsedLeads) {
-  if (!USE_MOCK) return apiFetch("/leads/import", { method: "POST", body: { leads: parsedLeads } });
+  if (!USE_MOCK) {
+    // Đúng endpoint POST /leads/bulk (BulkCreateLeadRequest), tối đa 500 lead/lần.
+    const leads = parsedLeads.map(toCreateLeadRequest);
+    return apiFetch("/leads/bulk", { method: "POST", body: { leads } });
+  }
   await mockDelay(300);
   const toInsert = [...parsedLeads].reverse();
   toInsert.forEach((l) => mockLeads.unshift(l));
@@ -209,7 +375,7 @@ export async function importLeads(parsedLeads) {
 
 /** GET /api/leads/{id} */
 export async function fetchLeadById(id) {
-  if (!USE_MOCK) return apiFetch(`/leads/${id}`);
+  if (!USE_MOCK) return mapLeadResponseToUi(await apiFetch(`/leads/${id}`));
   await mockDelay();
   const lead = mockLeads.find((l) => matchId(l.id, id));
   if (!lead) throw new ApiError("Không tìm thấy lead.", { status: 404 });
@@ -223,7 +389,12 @@ export async function fetchLeadById(id) {
  * Dùng ở Register.jsx (Landing Page form) trước khi tạo lead mới.
  */
 export async function findDuplicateLead({ phone, email }) {
-  if (!USE_MOCK) return apiFetch("/leads/check-duplicate", { params: { phone, email } });
+  if (!USE_MOCK) {
+    // Backend không có endpoint kiểm tra trước — trùng lặp chỉ phát hiện khi
+    // POST /leads trả về 409 Conflict. Không throw ở đây để form vẫn cho submit,
+    // xử lý trùng lặp thật sự nằm ở catch của createLead phía UI.
+    return null;
+  }
   await mockDelay(200);
   const phoneNorm = normalizePhone(phone);
   const emailNorm = normalizeEmail(email);
@@ -248,7 +419,7 @@ export async function findDuplicateLead({ phone, email }) {
  * vẫn tự kiểm tra lại field bắt buộc để phòng trường hợp gọi trực tiếp.
  */
 export async function createLead(payload) {
-  if (!USE_MOCK) return apiFetch("/leads", { method: "POST", body: payload });
+  if (!USE_MOCK) return mapLeadResponseToUi(await apiFetch("/leads", { method: "POST", body: toCreateLeadRequest(payload) }));
 
   await mockDelay();
   if (!payload.name?.trim() || !payload.course?.trim() || !payload.source?.trim()) {
@@ -309,7 +480,7 @@ export async function createLead(payload) {
 
 /** PUT /api/leads/{id} — cập nhật thông tin lead */
 export async function updateLead(id, payload) {
-  if (!USE_MOCK) return apiFetch(`/leads/${id}`, { method: "PUT", body: payload });
+  if (!USE_MOCK) return mapLeadResponseToUi(await apiFetch(`/leads/${id}`, { method: "PUT", body: toUpdateLeadRequest(payload) }));
   await mockDelay();
   const idx = mockLeads.findIndex((l) => matchId(l.id, id));
   if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
@@ -321,7 +492,11 @@ export async function updateLead(id, payload) {
 
 /** PATCH /api/leads/{id}/status — theo Mục V.4: cần lưu trạng thái cũ/mới + lý do */
 export async function updateLeadStatus(id, { newStatus, reason, note } = {}) {
-  if (!USE_MOCK) return apiFetch(`/leads/${id}/status`, { method: "PATCH", body: { newStatus, reason, note } });
+  if (!USE_MOCK) {
+    // UpdateLeadRequest (PUT /leads/{id}) không có field leadStage, và spec không
+    // có endpoint PATCH /leads/{id}/status riêng — cần hỏi TTS2 cách đổi giai đoạn lead.
+    return notSupportedByBackend("đổi trạng thái/giai đoạn lead (leadStage)");
+  }
   await mockDelay();
   const idx = mockLeads.findIndex((l) => matchId(l.id, id));
   if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
@@ -336,8 +511,17 @@ export async function updateLeadStatus(id, { newStatus, reason, note } = {}) {
 }
 
 /** PATCH /api/leads/{id}/assignment — phân công / chuyển người phụ trách */
-export async function assignLead(id, { assignee, reason } = {}) {
-  if (!USE_MOCK) return apiFetch(`/leads/${id}/assignment`, { method: "PATCH", body: { assignee, reason } });
+export async function assignLead(id, { assignee, ownerId, reason } = {}) {
+  if (!USE_MOCK) {
+    // AssignLeadRequest chỉ nhận { ownerId: number } — không có field "reason".
+    // "assignee" ở mock đang là TÊN nhân viên; cần đổi UI sang chọn theo id
+    // (ví dụ lấy từ settingsService.fetchUsers()) rồi truyền vào ownerId.
+    const targetOwnerId = ownerId ?? assignee;
+    if (targetOwnerId === undefined || Number.isNaN(Number(targetOwnerId))) {
+      throw new ApiError("Cần truyền ownerId (số) để phân công lead, không dùng tên nhân viên.", { status: 400 });
+    }
+    return mapLeadResponseToUi(await apiFetch(`/leads/${id}/owner`, { method: "PATCH", body: { ownerId: Number(targetOwnerId) } }));
+  }
   await mockDelay();
   const idx = mockLeads.findIndex((l) => matchId(l.id, id));
   if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
@@ -353,7 +537,13 @@ export async function assignLead(id, { assignee, reason } = {}) {
 
 /** POST /api/leads/{id}/archive — lưu trữ lead (không xóa cứng, theo Mục IX.2) */
 export async function archiveLead(id) {
-  if (!USE_MOCK) return apiFetch(`/leads/${id}/archive`, { method: "POST" });
+  if (!USE_MOCK) {
+    // Spec không có endpoint archive riêng. Field gần nghĩa nhất là
+    // doNotContact (UpdateLeadRequest) — không hoàn toàn giống "lưu trữ"
+    // (doNotContact nghĩa là "ngừng liên hệ", không phải "ẩn khỏi danh sách"),
+    // dùng tạm cho đến khi TTS2 xác nhận cách xử lý đúng.
+    return mapLeadResponseToUi(await apiFetch(`/leads/${id}`, { method: "PUT", body: { doNotContact: true } }));
+  }
   await mockDelay();
   const idx = mockLeads.findIndex((l) => matchId(l.id, id));
   if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
@@ -363,7 +553,7 @@ export async function archiveLead(id) {
 
 /** POST /api/leads/{id}/unarchive — khôi phục lead đã lưu trữ về danh sách hoạt động */
 export async function unarchiveLead(id) {
-  if (!USE_MOCK) return apiFetch(`/leads/${id}/unarchive`, { method: "POST" });
+  if (!USE_MOCK) return mapLeadResponseToUi(await apiFetch(`/leads/${id}`, { method: "PUT", body: { doNotContact: false } }));
   await mockDelay();
   const idx = mockLeads.findIndex((l) => matchId(l.id, id));
   if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
@@ -373,7 +563,7 @@ export async function unarchiveLead(id) {
 
 /** Xóa lead — chỉ dùng cho demo/dữ liệu thử nghiệm nội bộ. MVP không cho phép xóa cứng thật. */
 export async function deleteLead(id) {
-  if (!USE_MOCK) return apiFetch(`/leads/${id}`, { method: "DELETE" });
+  if (!USE_MOCK) return notSupportedByBackend("xóa lead");
   await mockDelay();
   const idx = mockLeads.findIndex((l) => matchId(l.id, id));
   if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
@@ -388,7 +578,7 @@ export async function deleteLead(id) {
  * sẵn để tránh N lần gọi API không cần thiết phía Front-end.
  */
 export async function fetchAllActivities() {
-  if (!USE_MOCK) return apiFetch("/lead-activities");
+  if (!USE_MOCK) return notSupportedByBackend("lịch sử chăm sóc gộp tất cả lead (chỉ có API theo từng lead: GET /leads/{id}/activities)");
   await mockDelay(350);
   const rows = mockLeads.flatMap((l) =>
     (mockCareHistory[l.id] || []).map((h) => ({ ...h, leadId: l.id, leadName: l.name, initials: l.initials, assignee: l.assignee }))
@@ -399,13 +589,28 @@ export async function fetchAllActivities() {
 
 /** GET /api/leads/{id}/activities + POST /api/leads/{id}/activities */
 export async function fetchLeadActivities(id) {
-  if (!USE_MOCK) return apiFetch(`/leads/${id}/activities`);
+  if (!USE_MOCK) {
+    const res = await apiFetch(`/leads/${id}/activities`);
+    return unwrapPage(res).items.map(mapActivityResponseToUi);
+  }
   await mockDelay();
   return clone(mockCareHistory[id] || []);
 }
 
 export async function addLeadActivity(id, activity) {
-  if (!USE_MOCK) return apiFetch(`/leads/${id}/activities`, { method: "POST", body: activity });
+  if (!USE_MOCK) {
+    const res = await apiFetch(`/leads/${id}/activities`, {
+      method: "POST",
+      body: {
+        activityType: ACTIVITY_TYPE_ENUM.includes(activity.activityType) ? activity.activityType : "NOTE",
+        content: activity.text,
+        result: ACTIVITY_RESULT_ENUM.includes(activity.result) ? activity.result : undefined,
+        nextAction: activity.nextAction || undefined,
+        nextActionAt: activity.nextActionAt || undefined,
+      },
+    });
+    return mapActivityResponseToUi(res);
+  }
   await mockDelay();
   return appendActivity(id, activity);
 }
@@ -424,7 +629,12 @@ function appendActivity(id, activity) {
 
 /** GET /api/leads/{id}/score + POST /api/leads/{id}/recalculate-score */
 export async function fetchLeadScore(id) {
-  if (!USE_MOCK) return apiFetch(`/leads/${id}/score`);
+  if (!USE_MOCK) {
+    // Không có endpoint /score riêng — điểm (fitScore/engagementScore/intentScore/
+    // totalScore) nằm sẵn trong LeadResponse, đọc trực tiếp từ fetchLeadById(id).
+    const lead = await apiFetch(`/leads/${id}`);
+    return { score: lead.totalScore, breakdown: null }; // backend không trả breakdown chi tiết từng tiêu chí như groupA-E
+  }
   await mockDelay(150);
   const lead = mockLeads.find((l) => matchId(l.id, id));
   if (!lead) throw new ApiError("Không tìm thấy lead.", { status: 404 });
@@ -432,7 +642,7 @@ export async function fetchLeadScore(id) {
 }
 
 export async function recalculateLeadScore(id) {
-  if (!USE_MOCK) return apiFetch(`/leads/${id}/recalculate-score`, { method: "POST" });
+  if (!USE_MOCK) return notSupportedByBackend("tính lại điểm thủ công (backend tự tính điểm khi có hoạt động mới, không có endpoint kích hoạt lại)");
   await mockDelay();
   const idx = mockLeads.findIndex((l) => matchId(l.id, id));
   if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
@@ -447,7 +657,7 @@ export async function recalculateLeadScore(id) {
  * bảng lead_score_events). Xem utils/leadScoring.js::getScoreHistory().
  */
 export async function fetchLeadScoreEvents(id) {
-  if (!USE_MOCK) return apiFetch(`/leads/${id}/score-events`);
+  if (!USE_MOCK) return notSupportedByBackend("lịch sử thay đổi điểm (lead_score_events)");
   await mockDelay(150);
   const lead = mockLeads.find((l) => matchId(l.id, id));
   if (!lead) throw new ApiError("Không tìm thấy lead.", { status: 404 });
@@ -456,7 +666,7 @@ export async function fetchLeadScoreEvents(id) {
 
 /** GET /api/scoring-rules — dùng cho ScoreRulesCard */
 export async function fetchScoringRules() {
-  if (!USE_MOCK) return apiFetch("/scoring-rules");
+  if (!USE_MOCK) return notSupportedByBackend("bảng luật chấm điểm (scoring-rules) — công thức tính điểm nằm phía backend, không expose qua API");
   await mockDelay(150);
   return clone({ groups: scoringGroups, deductionGroup });
 }
@@ -468,7 +678,12 @@ export async function fetchScoringRules() {
  * (response Content-Type: text/csv) nếu TTS2 làm export phía server.
  */
 export async function exportLeadsCsv(params = {}) {
-  if (!USE_MOCK) return apiFetch("/export/leads.csv", { params });
+  if (!USE_MOCK) {
+    // Spec không có endpoint xuất CSV — lấy toàn bộ lead qua GET /leads (size lớn)
+    // rồi để utils/exportCsv.js tự chuyển thành CSV phía client như bên mock.
+    const { items } = await fetchLeads({ ...params, page: 1, pageSize: 2000 });
+    return items;
+  }
   await mockDelay(200);
   const { items } = await fetchLeads({ ...params, page: 1, pageSize: 100000 });
   return items;

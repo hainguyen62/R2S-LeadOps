@@ -6,6 +6,7 @@ import {
   History,
   BarChart3,
   Settings,
+  CalendarClock,
   X,
 } from "lucide-react";
 import { navItems } from "../../data/mockData.js";
@@ -18,6 +19,7 @@ const iconMap = {
   History,
   BarChart3,
   Settings,
+  CalendarClock,
 };
 
 export default function Sidebar({ open = false, onClose, user }) {

@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Users, Activity, Bell, Link, ExternalLink, Pencil, Trash2, X, ShieldCheck, Check, Info, ArrowUpDown, ArrowUp, ArrowDown, AlertCircle, Loader2, Lock, Unlock, KeyRound } from "lucide-react";
+import { Users, Activity, Bell, Link, ExternalLink, Pencil, Trash2, X, ShieldCheck, Check, Info, ArrowUpDown, ArrowUp, ArrowDown, AlertCircle, Loader2, Lock, Unlock, KeyRound, Eye } from "lucide-react";
 import Avatar from "../components/ui/Avatar.jsx";
 import Pill from "../components/ui/Pill.jsx";
 import ConfirmDialog from "../components/ui/ConfirmDialog.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 import { SkeletonBlock } from "../components/ui/Skeleton.jsx";
 import { useToast } from "../components/ui/ToastProvider.jsx";
-import { fetchUsers, updateUser, deleteUser, fetchActivityLogs, lockUser, unlockUser, resetUserPassword, isUserActive } from "../services/settingsService.js";
+import { fetchUsers, updateUser, deleteUser, fetchActivityLogs, lockUser, unlockUser, resetUserPassword, isUserActive, fetchUserById, fetchUserLeads } from "../services/settingsService.js";
 
 const roleStyle = {
   Administrator: "bg-red-50 text-red-700",
@@ -69,6 +69,7 @@ export default function Settings() {
   const [lockTarget, setLockTarget] = useState(null); // { user, action: 'lock' | 'unlock' }
   const [lockingUser, setLockingUser] = useState(false);
   const [resetTarget, setResetTarget] = useState(null); // user đang được reset mật khẩu
+  const [detailUser, setDetailUser] = useState(null); // { user, leads, loading }
   const [resetForm, setResetForm] = useState({ newPassword: "", confirmPassword: "" });
   const [resetErrors, setResetErrors] = useState({});
   const [resettingPassword, setResettingPassword] = useState(false);
@@ -209,6 +210,17 @@ export default function Settings() {
     setResetErrors({});
   };
 
+  const openDetail = async (user) => {
+    setDetailUser({ user, leads: [], loading: true });
+    try {
+      const [full, leadsRes] = await Promise.all([fetchUserById(user.id), fetchUserLeads(user.id, { pageSize: 50 })]);
+      setDetailUser({ user: full, leads: leadsRes.items, loading: false });
+    } catch (err) {
+      toast.error(err.message || "Không tải được chi tiết người dùng.");
+      setDetailUser({ user, leads: [], loading: false });
+    }
+  };
+
   const submitResetPassword = async (e) => {
     e.preventDefault();
     const errors = {};
@@ -330,6 +342,13 @@ export default function Settings() {
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => openDetail(u)}
+                          title="Xem chi tiết"
+                          className="p-1.5 rounded-md text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                        >
+                          <Eye size={16} />
+                        </button>
                         <button
                           onClick={() => openEdit(u)}
                           title="Sửa"
@@ -675,6 +694,66 @@ export default function Settings() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {detailUser && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-elevated">
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
+              <div className="flex items-center gap-3">
+                <Avatar
+                  name={detailUser.user.name}
+                  initials={detailUser.user.name.split(" ").slice(-2).map((w) => w[0]).join("").toUpperCase()}
+                  size={36}
+                />
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{detailUser.user.name}</p>
+                  <p className="text-xs text-slate-500">{detailUser.user.email}</p>
+                </div>
+              </div>
+              <button onClick={() => setDetailUser(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-6 pb-2 flex items-center gap-2 shrink-0">
+              <Pill text={detailUser.user.role} map={roleStyle} />
+              {isUserActive(detailUser.user.status) ? (
+                <span className="text-xs text-emerald-600 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" /> Hoạt động
+                </span>
+              ) : (
+                <span className="text-xs text-red-600 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-red-500" /> Đã khóa
+                </span>
+              )}
+            </div>
+            <div className="px-6 pb-6 pt-2 overflow-y-auto">
+              <p className="text-xs font-medium text-slate-500 mb-2">
+                Lead đang phụ trách {!detailUser.loading && `(${detailUser.leads.length})`}
+              </p>
+              {detailUser.loading ? (
+                <div className="space-y-2">
+                  <SkeletonBlock className="h-12 rounded-lg" />
+                  <SkeletonBlock className="h-12 rounded-lg" />
+                </div>
+              ) : detailUser.leads.length === 0 ? (
+                <EmptyState compact icon={Users} title="Chưa phụ trách lead nào" />
+              ) : (
+                <div className="space-y-2">
+                  {detailUser.leads.map((l) => (
+                    <div key={l.id} className="border border-slate-100 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm text-slate-800 truncate">{l.name}</p>
+                        <p className="text-xs text-slate-500">{l.phone}</p>
+                      </div>
+                      <span className="text-xs text-slate-500 shrink-0">{l.status}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

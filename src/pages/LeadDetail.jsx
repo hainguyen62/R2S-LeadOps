@@ -11,6 +11,14 @@ import { statusStyle, classStyle, leadStatusOrder } from "../data/mockData.js";
 import { fetchLeadById, fetchLeadActivities, updateLeadStatus, assignLead, addLeadActivity, updateLead, fetchLeadScoreEvents } from "../services/leadService.js";
 import { fetchUsers } from "../services/settingsService.js";
 import { fetchCampaigns } from "../services/campaignService.js";
+import {
+  fetchLeadAppointments,
+  createAppointment,
+  cancelAppointment,
+  completeAppointment,
+  APPOINTMENT_CHANNEL_ENUM,
+  APPOINTMENT_RESULT_ENUM,
+} from "../services/appointmentService.js";
 import { priorityTier, getScoreBreakdown, scoreLead, scoringGroups, deductionGroup } from "../utils/leadScoring.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { isSales, isAdmin, can } from "../utils/permissions.js";
@@ -38,6 +46,33 @@ const activityResults = [
   "Đồng ý đặt cọc",
   "Không phù hợp",
 ];
+
+// Map nhãn tiếng Việt ở trên sang enum ACTIVITY_TYPE_ENUM/ACTIVITY_RESULT_ENUM
+// của backend (dùng khi gọi API thật) — vài nhãn không có tương ứng chính xác,
+// tạm chọn giá trị gần nghĩa nhất, cần TTS2 xác nhận lại.
+const ACTIVITY_TYPE_LABEL_TO_ENUM = {
+  "Gọi điện": "CALL",
+  Messenger: "MESSAGE",
+  Zalo: "ZALO",
+  Email: "EMAIL",
+  "Tư vấn trực tiếp": "CONSULTATION",
+  "Họp online": "MEETING",
+  "Gửi tài liệu": "NOTE",
+  "Hẹn gọi lại": "FOLLOW_UP",
+  "Ghi chú nội bộ": "NOTE",
+};
+const ACTIVITY_RESULT_LABEL_TO_ENUM = {
+  "Không nghe máy": "NO_ANSWER",
+  "Đã kết nối": "CONNECTED",
+  "Cần tư vấn thêm": "OTHER",
+  "Hẹn gọi lại": "CALLBACK",
+  "Đang cân nhắc": "INTERESTED",
+  "Đồng ý đặt cọc": "SUCCESS",
+  "Không phù hợp": "NOT_INTERESTED",
+};
+
+const APPOINTMENT_CHANNEL_LABEL = { PHONE: "Điện thoại", MESSENGER: "Messenger", ZALO: "Zalo", EMAIL: "Email", GOOGLE_MEET: "Google Meet", OFFLINE: "Gặp trực tiếp", OTHER: "Khác" };
+const APPOINTMENT_RESULT_LABEL = { INTERESTED: "Đang cân nhắc", NOT_INTERESTED: "Không phù hợp", CALLBACK: "Hẹn gọi lại", SUCCESS: "Thành công", FAILED: "Thất bại", OTHER: "Khác" };
 
 // Cùng bộ 3 cấp độ ưu tiên với popup Chi tiết lead ở Dashboard, để icon
 // lửa/giọt nước và badge nhất quán xuyên suốt ứng dụng.
@@ -87,6 +122,15 @@ export default function LeadDetail() {
   const [scoreFormOpen, setScoreFormOpen] = useState(false);
   const [draftSignals, setDraftSignals] = useState({});
   const [savingScore, setSavingScore] = useState(false);
+
+  const [appointments, setAppointments] = useState([]);
+  const [apptLoading, setApptLoading] = useState(false);
+  const [apptOpen, setApptOpen] = useState(false);
+  const [apptForm, setApptForm] = useState({ title: "", date: "", time: "", durationMinutes: 30, channel: "PHONE", note: "" });
+  const [apptSaving, setApptSaving] = useState(false);
+  const [apptAction, setApptAction] = useState(null); // { appointment, mode: "cancel" | "complete" }
+  const [apptActionForm, setApptActionForm] = useState({ reason: "", result: "SUCCESS", note: "" });
+  const [apptActionSaving, setApptActionSaving] = useState(false);
 
   // GET /api/leads/{id} + GET /api/leads/{id}/activities — xem leadService.js
   useEffect(() => {
@@ -199,6 +243,18 @@ export default function LeadDetail() {
     }
   };
 
+  // GET /leads/{id}/appointments — chỉ có dữ liệu khi kết nối API thật (Mục 4.1)
+  const refreshAppointments = () => {
+    setApptLoading(true);
+    fetchLeadAppointments(id, { pageSize: 50 })
+      .then(({ items }) => setAppointments(items))
+      .catch(() => setAppointments([]))
+      .finally(() => setApptLoading(false));
+  };
+  useEffect(() => {
+    refreshAppointments();
+  }, [id]);
+
   const refreshLead = async () => {
     const [l, h, se] = await Promise.all([fetchLeadById(lead.id), fetchLeadActivities(lead.id), fetchLeadScoreEvents(lead.id)]);
     setLead(l);
@@ -208,8 +264,63 @@ export default function LeadDetail() {
 
   // GET /api/users — mở modal Phân công là lúc mới cần danh sách Sales, không tải sẵn
   // từ đầu trang để tránh gọi API thừa cho những lead không ai mở modal này.
+  const openApptModal = () => {
+    setApptForm({ title: "", date: "", time: "", durationMinutes: 30, channel: "PHONE", note: "" });
+    setApptOpen(true);
+  };
+
+  const handleCreateAppointment = async (e) => {
+    e.preventDefault();
+    if (!apptForm.title.trim() || !apptForm.date || !apptForm.time) return;
+    setApptSaving(true);
+    try {
+      const appointmentAt = new Date(`${apptForm.date}T${apptForm.time}:00`).toISOString();
+      await createAppointment(lead.id, {
+        title: apptForm.title.trim(),
+        appointmentAt,
+        durationMinutes: Number(apptForm.durationMinutes) || 30,
+        channel: apptForm.channel,
+        note: apptForm.note.trim() || undefined,
+      });
+      refreshAppointments();
+      toast.success("Đã đặt lịch hẹn.");
+      setApptOpen(false);
+    } catch (err) {
+      toast.error(err.message || "Đặt lịch hẹn thất bại.");
+    } finally {
+      setApptSaving(false);
+    }
+  };
+
+  const openApptAction = (appointment, mode) => {
+    setApptActionForm({ reason: "", result: "SUCCESS", note: "" });
+    setApptAction({ appointment, mode });
+  };
+
+  const handleApptAction = async (e) => {
+    e.preventDefault();
+    if (!apptAction) return;
+    setApptActionSaving(true);
+    try {
+      if (apptAction.mode === "cancel") {
+        if (!apptActionForm.reason.trim()) return;
+        await cancelAppointment(apptAction.appointment.id, apptActionForm.reason.trim());
+        toast.success("Đã hủy lịch hẹn.");
+      } else {
+        await completeAppointment(apptAction.appointment.id, { result: apptActionForm.result, note: apptActionForm.note.trim() || undefined });
+        toast.success("Đã hoàn thành lịch hẹn.");
+      }
+      refreshAppointments();
+      setApptAction(null);
+    } catch (err) {
+      toast.error(err.message || "Cập nhật lịch hẹn thất bại.");
+    } finally {
+      setApptActionSaving(false);
+    }
+  };
+
   const openAssignModal = async () => {
-    setAssignForm({ assignee: lead.assignee || "", reason: "" });
+    setAssignForm({ assignee: "", reason: "" });
     setAssignOpen(true);
     setAssigneesLoading(true);
     try {
@@ -226,15 +337,17 @@ export default function LeadDetail() {
   const handleAssign = async (e) => {
     e.preventDefault();
     if (!assignForm.assignee) return;
-    if (assignForm.assignee === lead.assignee) {
+    const selected = assignees.find((u) => String(u.id) === String(assignForm.assignee));
+    if (!selected) return;
+    if (selected.name === lead.assignee) {
       setAssignOpen(false);
       return;
     }
     setAssigning(true);
     try {
-      await assignLead(lead.id, { assignee: assignForm.assignee, reason: assignForm.reason.trim() || undefined });
+      await assignLead(lead.id, { assignee: selected.name, ownerId: selected.id, reason: assignForm.reason.trim() || undefined });
       await refreshLead();
-      toast.success(`Đã phân công lead cho ${assignForm.assignee}.`);
+      toast.success(`Đã phân công lead cho ${selected.name}.`);
       setAssignOpen(false);
     } catch (err) {
       toast.error(err.message || "Phân công thất bại.");
@@ -252,7 +365,12 @@ export default function LeadDetail() {
       const text = activityForm.result
         ? `${activityForm.type}: ${activityForm.content.trim()} — Kết quả: ${activityForm.result}`
         : `${activityForm.type}: ${activityForm.content.trim()}`;
-      await addLeadActivity(lead.id, { text, channel: lead.assignee || "Hệ thống" });
+      await addLeadActivity(lead.id, {
+        text,
+        channel: lead.assignee || "Hệ thống",
+        activityType: ACTIVITY_TYPE_LABEL_TO_ENUM[activityForm.type],
+        result: activityForm.result ? ACTIVITY_RESULT_LABEL_TO_ENUM[activityForm.result] : undefined,
+      });
       await refreshLead();
       toast.success("Đã ghi nhận hoạt động chăm sóc.");
       setActivityOpen(false);
@@ -275,6 +393,7 @@ export default function LeadDetail() {
       await addLeadActivity(lead.id, {
         text: `Đặt lịch follow-up lúc ${formatted}${followUpForm.note.trim() ? ` — Ghi chú: ${followUpForm.note.trim()}` : ""}`,
         channel: lead.assignee || "Hệ thống",
+        activityType: "FOLLOW_UP",
       });
       await refreshLead();
       toast.success("Đã đặt lịch follow-up.");
@@ -318,6 +437,7 @@ export default function LeadDetail() {
       await addLeadActivity(lead.id, {
         text: `Cập nhật bảng điểm thủ công — điểm mới: ${updated.score}`,
         channel: lead.assignee || "Hệ thống",
+        activityType: "NOTE",
       });
       await refreshLead();
       toast.success("Đã lưu bảng điểm.");
@@ -550,8 +670,53 @@ export default function LeadDetail() {
           </div>
         </div>
 
-        {/* ---- Cột phải: Lịch sử chăm sóc ---- */}
-        <div className="lg:col-span-3">
+        {/* ---- Cột phải: Lịch hẹn tư vấn + Lịch sử chăm sóc ---- */}
+        <div className="lg:col-span-3 space-y-6">
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-card">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm font-semibold text-slate-900">Lịch hẹn tư vấn</p>
+              <button
+                onClick={openApptModal}
+                className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700"
+              >
+                <PlusCircle size={13} /> Đặt lịch hẹn
+              </button>
+            </div>
+            {apptLoading ? (
+              <p className="text-sm text-slate-400">Đang tải...</p>
+            ) : appointments.length === 0 ? (
+              <p className="text-sm text-slate-400">Chưa có lịch hẹn nào.</p>
+            ) : (
+              <div className="space-y-3">
+                {appointments.map((a) => (
+                  <div key={a.id} className="border border-slate-100 rounded-lg p-3">
+                    <p className="text-sm font-medium text-slate-800">{a.title}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {new Date(a.appointmentAt).toLocaleString("vi-VN")} · {a.durationMinutes} phút · {a.channelLabel}
+                    </p>
+                    <div className="flex items-center justify-between mt-2">
+                      <Pill
+                        text={a.statusLabel}
+                        map={{
+                          "Đã hoàn thành": "bg-emerald-50 text-emerald-700",
+                          "Đã hủy": "bg-slate-100 text-slate-500",
+                          "Lead không đến": "bg-slate-100 text-slate-500",
+                        }}
+                        fallback="bg-indigo-50 text-indigo-700"
+                      />
+                      {(a.status === "SCHEDULED" || a.status === "CONFIRMED") && (
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => openApptAction(a, "complete")} className="text-xs font-medium text-emerald-600 hover:text-emerald-700">Hoàn thành</button>
+                          <button onClick={() => openApptAction(a, "cancel")} className="text-xs font-medium text-red-500 hover:text-red-600">Hủy</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-card">
             <p className="text-sm font-semibold text-slate-900 mb-4">Lịch sử chăm sóc</p>
             {history.length === 0 ? (
@@ -574,6 +739,128 @@ export default function LeadDetail() {
           </div>
         </div>
       </div>
+
+      {/* ---- Modal: Đặt lịch hẹn tư vấn ---- */}
+      {apptOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-sm shadow-elevated">
+            <div className="flex items-center justify-between px-6 pt-6 pb-2">
+              <p className="text-sm font-semibold text-slate-900">Đặt lịch hẹn tư vấn</p>
+              <button onClick={() => setApptOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+            </div>
+            <form onSubmit={handleCreateAppointment} className="px-6 pb-6 pt-2 space-y-3">
+              <div>
+                <label className="text-xs font-medium text-slate-600">Tiêu đề</label>
+                <input
+                  value={apptForm.title}
+                  onChange={(e) => setApptForm((f) => ({ ...f, title: e.target.value }))}
+                  placeholder="Tư vấn khóa học..."
+                  className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Ngày</label>
+                  <input type="date" value={apptForm.date} onChange={(e) => setApptForm((f) => ({ ...f, date: e.target.value }))} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" required />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Giờ</label>
+                  <input type="time" value={apptForm.time} onChange={(e) => setApptForm((f) => ({ ...f, time: e.target.value }))} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" required />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Thời lượng (phút)</label>
+                  <input
+                    type="number"
+                    min={5}
+                    max={480}
+                    value={apptForm.durationMinutes}
+                    onChange={(e) => setApptForm((f) => ({ ...f, durationMinutes: e.target.value }))}
+                    className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Kênh</label>
+                  <select value={apptForm.channel} onChange={(e) => setApptForm((f) => ({ ...f, channel: e.target.value }))} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
+                    {APPOINTMENT_CHANNEL_ENUM.map((c) => (
+                      <option key={c} value={c}>{APPOINTMENT_CHANNEL_LABEL[c]}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600">Ghi chú</label>
+                <textarea
+                  value={apptForm.note}
+                  onChange={(e) => setApptForm((f) => ({ ...f, note: e.target.value }))}
+                  rows={2}
+                  className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setApptOpen(false)} className="px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-800">Hủy</button>
+                <button type="submit" disabled={apptSaving} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-60 flex items-center gap-2">
+                  {apptSaving && <Loader2 size={14} className="animate-spin" />} Lưu lịch hẹn
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ---- Modal: Hủy / Hoàn thành lịch hẹn ---- */}
+      {apptAction && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-sm shadow-elevated">
+            <div className="flex items-center justify-between px-6 pt-6 pb-2">
+              <p className="text-sm font-semibold text-slate-900">{apptAction.mode === "cancel" ? "Hủy lịch hẹn" : "Hoàn thành lịch hẹn"}</p>
+              <button onClick={() => setApptAction(null)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+            </div>
+            <form onSubmit={handleApptAction} className="px-6 pb-6 pt-2 space-y-3">
+              {apptAction.mode === "cancel" ? (
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Lý do hủy</label>
+                  <textarea
+                    value={apptActionForm.reason}
+                    onChange={(e) => setApptActionForm((f) => ({ ...f, reason: e.target.value }))}
+                    rows={3}
+                    className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                    required
+                  />
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-xs font-medium text-slate-600">Kết quả</label>
+                    <select value={apptActionForm.result} onChange={(e) => setApptActionForm((f) => ({ ...f, result: e.target.value }))} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
+                      {APPOINTMENT_RESULT_ENUM.map((r) => (
+                        <option key={r} value={r}>{APPOINTMENT_RESULT_LABEL[r]}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-600">Ghi chú</label>
+                    <textarea
+                      value={apptActionForm.note}
+                      onChange={(e) => setApptActionForm((f) => ({ ...f, note: e.target.value }))}
+                      rows={2}
+                      className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                </>
+              )}
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setApptAction(null)} className="px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-800">Đóng</button>
+                <button type="submit" disabled={apptActionSaving} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-60 flex items-center gap-2">
+                  {apptActionSaving && <Loader2 size={14} className="animate-spin" />} Xác nhận
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ---- Modal: Phân công lead (Module 5) ---- */}
       {assignOpen && (
@@ -603,7 +890,7 @@ export default function LeadDetail() {
                   >
                     <option value="">Chọn nhân viên Sales</option>
                     {assignees.map((u) => (
-                      <option key={u.id} value={u.name}>{u.name}</option>
+                      <option key={u.id} value={u.id}>{u.name}</option>
                     ))}
                   </select>
                 )}

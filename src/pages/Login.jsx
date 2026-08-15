@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Mail, Lock, LogIn, Loader2, Eye, EyeOff, Zap, ShieldCheck, UserPlus } from "lucide-react";
+import { Mail, Lock, LogIn, Loader2, Eye, EyeOff, Zap, ShieldCheck, UserPlus, X } from "lucide-react";
 import Avatar from "../components/ui/Avatar.jsx";
 import PublicHeader from "../components/layout/PublicHeader.jsx";
-import { login } from "../services/authService.js";
+import { login, forgotPassword } from "../services/authService.js";
 import { validateLoginForm, hasErrors } from "../utils/validators.js";
 import { useToast } from "../components/ui/ToastProvider.jsx";
 
@@ -22,6 +22,10 @@ export default function Login({ onLogin }) {
   const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSending, setForgotSending] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
   const toast = useToast();
 
   const doLogin = async (loginEmail, loginPassword) => {
@@ -120,12 +124,17 @@ export default function Login({ onLogin }) {
                 </div>
                 {fieldErrors.password && <p className="mt-1 text-xs text-red-600">{fieldErrors.password}</p>}
                 <div className="mt-2 text-right">
-                  <a
-                    href="#forgot"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotEmail(email);
+                      setForgotSent(false);
+                      setForgotOpen(true);
+                    }}
                     className="cursor-pointer text-xs font-medium text-brand-600 hover:text-brand-700"
                   >
                     Quên mật khẩu?
-                  </a>
+                  </button>
                 </div>
               </div>
 
@@ -219,6 +228,67 @@ export default function Login({ onLogin }) {
           </div>
         </div>
       </div>
+
+      {forgotOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-elevated">
+            <div className="flex items-center justify-between px-6 pt-6 pb-2">
+              <p className="text-sm font-semibold text-slate-900">Quên mật khẩu</p>
+              <button onClick={() => setForgotOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={16} />
+              </button>
+            </div>
+            {forgotSent ? (
+              <div className="px-6 pb-6 pt-2">
+                <p className="text-sm text-slate-600">
+                  Nếu email này tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi tới đó.
+                </p>
+                <button
+                  onClick={() => setForgotOpen(false)}
+                  className="mt-4 w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                >
+                  Đóng
+                </button>
+              </div>
+            ) : (
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setForgotSending(true);
+                  try {
+                    await forgotPassword({ email: forgotEmail });
+                    setForgotSent(true);
+                  } catch (err) {
+                    toast.error(err.message || "Gửi yêu cầu thất bại.");
+                  } finally {
+                    setForgotSending(false);
+                  }
+                }}
+                className="space-y-3 px-6 pb-6 pt-2"
+              >
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Email</label>
+                  <input
+                    type="email"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="ban@r2s.edu.vn"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={forgotSending}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+                >
+                  {forgotSending && <Loader2 size={14} className="animate-spin" />} Gửi yêu cầu
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

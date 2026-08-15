@@ -2,7 +2,7 @@
    DASHBOARD SERVICE — khớp Mục X.5 (Dashboard) trong kế hoạch.
    ============================================================ */
 
-import { apiFetch, USE_MOCK, mockDelay } from "./apiClient.js";
+import { apiFetch, USE_MOCK, mockDelay, ApiError } from "./apiClient.js";
 import {
   stats,
   leadsByDay,
@@ -18,29 +18,21 @@ function clone(obj) {
   return typeof structuredClone === "function" ? structuredClone(obj) : JSON.parse(JSON.stringify(obj));
 }
 
-/** GET /api/dashboard/overview — thẻ KPI tổng quan */
+/** GET /dashboard/counter-lead — không nhận tham số range */
 export async function fetchDashboardOverview() {
-  if (!USE_MOCK) return apiFetch("/dashboard/overview");
+  if (!USE_MOCK) return apiFetch("/dashboard/counter-lead");
   await mockDelay(400);
   return clone(stats);
 }
 
-/** GET /api/dashboard/leads-by-course (+ theo ngày, dùng chung 1 endpoint mock) */
+/** Backend chưa có endpoint leads-by-day */
 export async function fetchLeadsByDay() {
-  if (!USE_MOCK) return apiFetch("/dashboard/leads-by-day");
+  if (!USE_MOCK) throw new ApiError('Backend chưa có API "leads-by-day".', { status: 501 });
   await mockDelay(300);
   return clone(leadsByDay);
 }
 
-/**
- * GET /dashboard/lead-status — số lượng lead theo TỪNG TRẠNG THÁI (Lead mới,
- * Đã liên hệ, Đang tư vấn...), đúng mô tả trong APIs_check_list.xlsx:
- * "Trả lại thông tin số lượng lead theo trạng thái".
- *
- * Lưu ý: đây KHÔNG phải là phân loại Nóng/Ấm/Lạnh (xem `classification` bên
- * dưới) — trước đây hàm này bị đặt tên `fetchLeadsByStatusClassification` và
- * trả nhầm dữ liệu classification, gây nhầm lẫn giữa 2 khái niệm khác nhau.
- */
+/** GET /dashboard/lead-status — trả về [{ stage, count }], stage là enum LeadStage */
 export async function fetchLeadsByStatus() {
   if (!USE_MOCK) return apiFetch("/dashboard/lead-status");
   await mockDelay(300);
@@ -50,16 +42,16 @@ export async function fetchLeadsByStatus() {
   }));
 }
 
-/** GET /dashboard/lead-resource */
+/** GET /dashboard/lead-resource — trả về [{ source, count }] */
 export async function fetchLeadsBySource() {
   if (!USE_MOCK) return apiFetch("/dashboard/lead-resource");
   await mockDelay(300);
   return clone(sources);
 }
 
-/** GET /api/dashboard/conversion-funnel */
+/** Backend chưa có endpoint conversion-funnel */
 export async function fetchConversionFunnel() {
-  if (!USE_MOCK) return apiFetch("/dashboard/conversion-funnel");
+  if (!USE_MOCK) throw new ApiError('Backend chưa có API "conversion-funnel".', { status: 501 });
   await mockDelay(300);
   return clone(funnel);
 }
@@ -123,11 +115,7 @@ function filterShare({ course, status } = {}) {
  * (đã nhân tỉ lệ 1:1) để số liệu lọc/tất cả luôn khớp nhau.
  */
 export async function fetchLeadsByDayRange(days, filters = {}) {
-  if (!USE_MOCK) {
-    return apiFetch("/dashboard/leads-by-day", {
-      params: { range: days, course: filters.course || undefined, status: filters.status || undefined },
-    });
-  }
+  if (!USE_MOCK) throw new ApiError('Backend chưa có API "leads-by-day" (kèm tham số range).', { status: 501 });
   await mockDelay(250);
   const share = filterShare(filters);
   const base = days === "all" ? buildDailySeries(30) : buildDailySeries(days);
@@ -175,7 +163,7 @@ function pctChange(curr, prev, compareLabel) {
  * (1/7/15/30) hoặc chuỗi "all" (Tất cả — không lọc theo thời gian).
  */
 export async function fetchDashboardByRange(days) {
-  if (!USE_MOCK) return apiFetch("/dashboard/overview", { params: { range: days } });
+  if (!USE_MOCK) throw new ApiError('Backend chưa hỗ trợ tham số "range" cho dashboard.', { status: 501 });
   await mockDelay(350);
 
   // "Tất cả": dùng thẳng số liệu toàn thời gian có sẵn trong mockData
@@ -285,24 +273,27 @@ export async function fetchDashboardByRange(days) {
   });
 }
 
-/**
- * GET /dashboard/top-lead — "Lead cần xử lý ngay".
- *
- * Định nghĩa lấy đúng theo tài liệu kế hoạch, không tự suy diễn thêm:
- *   - Mục VII.4 (Phân loại lead): CHỈ "Lead nóng" (70–100đ) có hành động
- *     "Liên hệ ưu tiên ngay" — Ấm/Lạnh có hành động khác (nurturing), không
- *     phải "xử lý ngay".
- *   - Mục XI.2 (Dashboard — Danh sách hành động): liệt kê cụ thể mục
- *     "Lead nóng CHƯA LIÊN HỆ" (không phải mọi lead nóng nói chung).
- * "Chưa liên hệ" = status vẫn ở bước đầu luồng trạng thái ("Lead mới" —
- * xem leadStatusOrder/Mục V.3), vì "Đã liên hệ" đã là bước kế tiếp.
- *
- * (Trước đây hàm này lọc theo `priorityTier` — ngưỡng 50/80đ tự đặt riêng
- * cho mục đích hiển thị icon, không khớp ngưỡng 70/40 của tài liệu, và
- * không loại các lead đã được liên hệ — nay đã sửa lại cho đúng.)
- */
+function toInitials(name) {
+  return String(name || "")
+    .trim()
+    .split(" ")
+    .slice(-2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
+}
+
+/** TopLeadResponse (backend) -> đúng field UI đang dùng ở HotLeadsPanel (name, initials, score...). */
+function mapTopLeadToUi(l) {
+  return { id: l.leadId, name: l.fullName, initials: toInitials(l.fullName), score: l.totalScore, assignee: l.ownerName || undefined, course: "" };
+}
+
+/** GET /dashboard/top-leads — top lead điểm cao nhất, không lọc theo trạng thái "chưa liên hệ" như bản mock */
 export async function fetchHotLeads(limit = 5) {
-  if (!USE_MOCK) return apiFetch("/dashboard/top-lead", { params: { limit } });
+  if (!USE_MOCK) {
+    const rows = await apiFetch("/dashboard/top-leads", { params: { limit } });
+    return rows.map(mapTopLeadToUi);
+  }
   await mockDelay(300);
   const rows = [...mockLeads]
     .filter((l) => classify(l.score, l) === "Lead nóng" && l.status === "Lead mới")
@@ -311,9 +302,9 @@ export async function fetchHotLeads(limit = 5) {
   return clone(rows);
 }
 
-/** Lead chưa có Sales phụ trách (assignee null/undefined/rỗng) — điểm cao nhất trước. */
+/** Backend chưa có endpoint unassigned-leads */
 export async function fetchUnassignedLeads(limit = 5) {
-  if (!USE_MOCK) return apiFetch("/dashboard/unassigned-leads", { params: { limit } });
+  if (!USE_MOCK) throw new ApiError('Backend chưa có API "unassigned-leads".', { status: 501 });
   await mockDelay(300);
   const rows = [...mockLeads]
     .filter((l) => !l.assignee)
@@ -322,14 +313,9 @@ export async function fetchUnassignedLeads(limit = 5) {
   return clone(rows);
 }
 
-/**
- * Lead đến hạn/quá hạn follow-up (Mục V.2 + IX: `next_follow_up_at`).
- * "Đến hạn" = nextFollowUpAt đã được đặt VÀ <= thời điểm hiện tại — lead có
- * lịch hẹn trong tương lai (chưa tới hạn) KHÔNG hiển thị ở đây. Quá hạn lâu
- * nhất lên đầu (khớp KPI "Số follow-up quá hạn" ở Mục XII.2 kế hoạch).
- */
+/** Backend chưa có endpoint followup-leads */
 export async function fetchFollowUpLeads(limit = 5) {
-  if (!USE_MOCK) return apiFetch("/dashboard/followup-leads", { params: { limit } });
+  if (!USE_MOCK) throw new ApiError('Backend chưa có API "followup-leads".', { status: 501 });
   await mockDelay(300);
   const now = new Date();
   const rows = [...mockLeads]
@@ -339,9 +325,9 @@ export async function fetchFollowUpLeads(limit = 5) {
   return clone(rows);
 }
 
-/** Xu hướng chuyển đổi theo tháng (Lead vs Đã đăng ký) — dùng cho trang Reports. */
+/** Backend chưa có endpoint conversion-trend */
 export async function fetchConversionTrend() {
-  if (!USE_MOCK) return apiFetch("/dashboard/conversion-trend");
+  if (!USE_MOCK) throw new ApiError('Backend chưa có API "conversion-trend".', { status: 501 });
   await mockDelay(300);
   return [
     { period: "T1", lead: 120, converted: 8 },
@@ -352,9 +338,9 @@ export async function fetchConversionTrend() {
   ];
 }
 
-/** GET /api/dashboard/follow-ups — follow-up quá hạn / sắp đến hạn */
+/** Backend chưa có endpoint follow-ups */
 export async function fetchFollowUps() {
-  if (!USE_MOCK) return apiFetch("/dashboard/follow-ups");
+  if (!USE_MOCK) throw new ApiError('Backend chưa có API "follow-ups".', { status: 501 });
   await mockDelay(300);
   return []; // Chưa có dữ liệu next_follow_up_at trong mock — Back-end bổ sung khi có bảng leads thật
 }

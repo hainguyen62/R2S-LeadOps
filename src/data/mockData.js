@@ -487,6 +487,7 @@ export const navItems = [
   { label: "Dashboard", path: "/", icon: "LayoutDashboard" },
   { label: "Leads", path: "/leads", icon: "Users" },
   { label: "Chiến dịch", path: "/campaigns", icon: "GitBranch" },
+  { label: "Lịch hẹn của tôi", path: "/appointments", icon: "CalendarClock" },
   { label: "Lịch sử chăm sóc", path: "/history", icon: "History" },
   { label: "Báo cáo", path: "/reports", icon: "BarChart3" },
   { label: "Cài đặt", path: "/settings", icon: "Settings" },

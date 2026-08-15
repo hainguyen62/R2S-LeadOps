@@ -1,74 +1,126 @@
 /* ============================================================
-   CAMPAIGN SERVICE — khớp Mục X.7 (Master data: campaigns) trong
-   kế hoạch triển khai.
+   CAMPAIGN SERVICE — backend chưa có resource Campaign (chỉ có
+   campaignCode dạng chuỗi tự do trong Lead), nên toàn bộ dữ liệu
+   campaign được quản lý cục bộ (localStorage) ở đây, độc lập với
+   USE_MOCK. Số liệu leads/hotLeads/deposits/registrations được
+   tính trực tiếp từ leadService (khớp lead có campaign = tên
+   chiến dịch), nên luôn đúng với dữ liệu lead thật tại thời điểm
+   gọi, dù đang chạy mock hay API thật.
    ============================================================ */
 
-import { apiFetch, USE_MOCK, mockDelay, ApiError } from "./apiClient.js";
-import { campaigns as mockCampaigns, campaignTrends as mockCampaignTrends } from "../data/mockData.js";
+import { ApiError } from "./apiClient.js";
+import { fetchLeads } from "./leadService.js";
+import { campaigns as seedCampaigns } from "../data/mockData.js";
+
+const STORAGE_KEY = "r2s_leadops_campaigns_v1";
 
 function clone(obj) {
   return typeof structuredClone === "function" ? structuredClone(obj) : JSON.parse(JSON.stringify(obj));
 }
 
-/** GET /api/campaigns */
+function getStorage() {
+  try {
+    return typeof window !== "undefined" ? window.localStorage : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadRaw() {
+  const storage = getStorage();
+  if (!storage) return clone(seedCampaigns);
+  const raw = storage.getItem(STORAGE_KEY);
+  if (!raw) {
+    const seeded = seedCampaigns.map(({ leads, hotLeads, deposits, registrations, ...rest }) => rest);
+    storage.setItem(STORAGE_KEY, JSON.stringify(seeded));
+    return seeded;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return clone(seedCampaigns);
+  }
+}
+
+function saveRaw(list) {
+  const storage = getStorage();
+  if (!storage) return;
+  storage.setItem(STORAGE_KEY, JSON.stringify(list));
+}
+
+async function computeStats(campaignName) {
+  try {
+    const { items } = await fetchLeads({ campaign: campaignName, pageSize: 1000 });
+    return {
+      leads: items.length,
+      hotLeads: items.filter((l) => l.cls === "Lead nóng").length,
+      deposits: items.filter((l) => l.status === "Đã đặt cọc").length,
+      registrations: items.filter((l) => l.status === "Đã đăng ký").length,
+    };
+  } catch {
+    return { leads: 0, hotLeads: 0, deposits: 0, registrations: 0 };
+  }
+}
+
 export async function fetchCampaigns() {
-  if (!USE_MOCK) return apiFetch("/campaigns");
-  await mockDelay(350);
-  return clone(mockCampaigns);
+  const raw = loadRaw();
+  return Promise.all(raw.map(async (c) => ({ ...c, ...(await computeStats(c.name)) })));
 }
 
-/** GET /api/campaigns (chi tiết 1 campaign — dùng chung dữ liệu list ở mock) */
 export async function fetchCampaignById(id) {
-  if (!USE_MOCK) return apiFetch(`/campaigns/${id}`);
-  await mockDelay(300);
-  const campaign = mockCampaigns.find((c) => c.id === Number(id));
+  const raw = loadRaw();
+  const campaign = raw.find((c) => c.id === Number(id));
   if (!campaign) throw new ApiError("Không tìm thấy chiến dịch.", { status: 404 });
-  return clone(campaign);
+  return { ...campaign, ...(await computeStats(campaign.name)) };
 }
 
-/** Xu hướng lead theo ngày của 1 chiến dịch — dùng cho biểu đồ CampaignDetails */
+/** Xu hướng lead theo ngày, gộp từ chính danh sách lead thật của chiến dịch. */
 export async function fetchCampaignTrend(id) {
-  if (!USE_MOCK) return apiFetch(`/campaigns/${id}/trend`);
-  await mockDelay(300);
-  return clone(mockCampaignTrends[id] || []);
+  const raw = loadRaw();
+  const campaign = raw.find((c) => c.id === Number(id));
+  if (!campaign) return [];
+  const { items } = await fetchLeads({ campaign: campaign.name, pageSize: 1000 });
+  const byDay = new Map();
+  for (const l of items) {
+    const day = (l.date || "").split(" ")[0]; // "dd/mm/yyyy hh:mm" -> "dd/mm/yyyy"
+    if (!day) continue;
+    byDay.set(day, (byDay.get(day) || 0) + 1);
+  }
+  return [...byDay.entries()]
+    .map(([date, count]) => ({ date, count }))
+    .sort((a, b) => {
+      const [d1, m1, y1] = a.date.split("/").map(Number);
+      const [d2, m2, y2] = b.date.split("/").map(Number);
+      return new Date(y1, m1 - 1, d1) - new Date(y2, m2 - 1, d2);
+    });
 }
 
-/** POST /api/campaigns */
 export async function createCampaign(payload) {
-  if (!USE_MOCK) return apiFetch("/campaigns", { method: "POST", body: payload });
-  await mockDelay();
   if (!payload.name?.trim()) {
     throw new ApiError("Thiếu tên chiến dịch.", { status: 400, fieldErrors: { name: "Vui lòng nhập tên chiến dịch." } });
   }
-  const newCampaign = {
-    id: Date.now(),
-    leads: 0,
-    hotLeads: 0,
-    deposits: 0,
-    registrations: 0,
-    status: "Đang chạy",
-    ...payload,
-  };
-  mockCampaigns.unshift(newCampaign);
-  return clone(newCampaign);
+  const raw = loadRaw();
+  const newCampaign = { id: Date.now(), status: "Đang chạy", ...payload };
+  raw.unshift(newCampaign);
+  saveRaw(raw);
+  return { ...newCampaign, ...(await computeStats(newCampaign.name)) };
 }
 
-/** PUT /api/campaigns/{id} */
+/** Đổi payload.name sẽ làm mất liên kết với lead đã tạo trước đó (lead lưu campaign theo tên cũ). */
 export async function updateCampaign(id, payload) {
-  if (!USE_MOCK) return apiFetch(`/campaigns/${id}`, { method: "PUT", body: payload });
-  await mockDelay();
-  const idx = mockCampaigns.findIndex((c) => c.id === Number(id));
+  const raw = loadRaw();
+  const idx = raw.findIndex((c) => c.id === Number(id));
   if (idx === -1) throw new ApiError("Không tìm thấy chiến dịch.", { status: 404 });
-  mockCampaigns[idx] = { ...mockCampaigns[idx], ...payload };
-  return clone(mockCampaigns[idx]);
+  raw[idx] = { ...raw[idx], ...payload };
+  saveRaw(raw);
+  return { ...raw[idx], ...(await computeStats(raw[idx].name)) };
 }
 
-/** Xóa chiến dịch — dùng cho dữ liệu thử nghiệm nội bộ (chưa có trong danh sách endpoint chuẩn của kế hoạch). */
 export async function deleteCampaign(id) {
-  if (!USE_MOCK) return apiFetch(`/campaigns/${id}`, { method: "DELETE" });
-  await mockDelay();
-  const idx = mockCampaigns.findIndex((c) => c.id === Number(id));
+  const raw = loadRaw();
+  const idx = raw.findIndex((c) => c.id === Number(id));
   if (idx === -1) throw new ApiError("Không tìm thấy chiến dịch.", { status: 404 });
-  const [removed] = mockCampaigns.splice(idx, 1);
-  return clone(removed);
+  const [removed] = raw.splice(idx, 1);
+  saveRaw(raw);
+  return removed;
 }
