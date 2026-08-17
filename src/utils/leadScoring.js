@@ -202,18 +202,28 @@ export function parseVnDate(str) {
 }
 
 /**
- * Biến động điểm lớn nhất trong lần tính điểm gần nhất của lead — dùng để
- * xếp hạng "Lead thay đổi điểm mạnh trong ngày" (Mục XI.2 danh sách hành
- * động) khi backend CHƯA có API lịch sử điểm (lead_score_events, Mục IX) để
- * biết chính xác mức tăng/giảm thật giữa 2 lần chấm điểm liên tiếp. Đây là
- * giá trị SUY RA từ breakdown hiện tại (tín hiệu cộng/trừ điểm lớn nhất đang
- * áp dụng cho lead), không phải delta thật giữa 2 thời điểm — chỉ dùng cho
- * mục đích demo/tham khảo cho tới khi có API thật.
+ * Biến động điểm LỚN NHẤT (theo trị tuyệt đối) trong lần tính điểm gần nhất
+ * của lead — dùng để xếp hạng "Lead thay đổi điểm mạnh trong ngày" (Mục
+ * XI.2 danh sách hành động) khi backend CHƯA có API lịch sử điểm
+ * (lead_score_events, Mục IX) để biết chính xác mức tăng/giảm thật giữa 2
+ * lần chấm điểm liên tiếp. Đây là giá trị SUY RA từ breakdown hiện tại (tín
+ * hiệu cộng/trừ điểm lớn nhất đang áp dụng cho lead), không phải delta thật
+ * giữa 2 thời điểm — chỉ dùng cho mục đích demo/tham khảo cho tới khi có
+ * API thật.
+ *
+ * QUAN TRỌNG: trả về giá trị CÓ DẤU (dương = biến động lớn nhất là cộng
+ * điểm, âm = biến động lớn nhất là trừ điểm) — KHÔNG lấy trị tuyệt đối —
+ * để nơi gọi phân biệt được "tăng mạnh" và "giảm mạnh", tránh hiển thị sai
+ * chiều (ví dụ: một lead bị trừ -100đ vì spam không được gắn nhãn "tăng
+ * mạnh +100đ").
  */
 export function largestScoreSwing(lead) {
   const breakdown = getScoreBreakdown(lead);
   if (breakdown.length === 0) return 0;
-  return Math.max(...breakdown.map((b) => Math.abs(Number(b.value))));
+  return breakdown.reduce((best, b) => {
+    const v = Number(b.value);
+    return Math.abs(v) > Math.abs(best) ? v : best;
+  }, 0);
 }
 
 /**

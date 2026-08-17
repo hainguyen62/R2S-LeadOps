@@ -18,6 +18,15 @@ function clone(obj) {
   return typeof structuredClone === "function" ? structuredClone(obj) : JSON.parse(JSON.stringify(obj));
 }
 
+// Lead "Không hợp lệ" (bị đánh dấu spam/fake hoặc tổng điểm về 0) KHÔNG được
+// đưa vào bất kỳ danh sách ưu tiên nào, theo đúng Mục VII.4 tài liệu BA
+// ("Không hợp lệ ... Không đưa vào danh sách ưu tiên"). fetchHotLeads đã tự
+// loại trừ (vì spam không bao giờ được xếp "Lead nóng"), nhưng
+// fetchUnassignedLeads/fetchFollowUpLeads/fetchChangedTodayLeads cần lọc rõ
+// vì các điều kiện lọc riêng của chúng (chưa phân công, đến hạn follow-up,
+// vừa đổi điểm) không tự loại trừ spam.
+const isValidLead = (l) => classify(l.score, l) !== "Không hợp lệ";
+
 /** GET /dashboard/counter-lead — không nhận tham số range */
 export async function fetchDashboardOverview() {
   if (!USE_MOCK) return apiFetch("/dashboard/counter-lead");
@@ -319,7 +328,7 @@ export async function fetchUnassignedLeads(limit = 5) {
   if (!USE_MOCK) throw new ApiError('Backend chưa có API "unassigned-leads".', { status: 501 });
   await mockDelay(300);
   const rows = [...mockLeads]
-    .filter((l) => !l.assignee)
+    .filter((l) => !l.assignee && isValidLead(l))
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
   return clone(rows);
@@ -331,7 +340,7 @@ export async function fetchFollowUpLeads(limit = 5) {
   await mockDelay(300);
   const now = new Date();
   const rows = [...mockLeads]
-    .filter((l) => l.nextFollowUpAt && new Date(l.nextFollowUpAt) <= now)
+    .filter((l) => l.nextFollowUpAt && new Date(l.nextFollowUpAt) <= now && isValidLead(l))
     .sort((a, b) => new Date(a.nextFollowUpAt) - new Date(b.nextFollowUpAt))
     .slice(0, limit);
   return clone(rows);
@@ -370,10 +379,10 @@ export async function fetchChangedTodayLeads(limit = 5) {
     .toDateString();
 
   const rows = withDate
-    .filter((x) => x.refDate.toDateString() === latestDayKey)
+    .filter((x) => x.refDate.toDateString() === latestDayKey && isValidLead(x.lead))
     .map((x) => ({ ...x.lead, swing: largestScoreSwing(x.lead) }))
-    .filter((l) => l.swing > 0)
-    .sort((a, b) => b.swing - a.swing)
+    .filter((l) => l.swing !== 0)
+    .sort((a, b) => Math.abs(b.swing) - Math.abs(a.swing))
     .slice(0, limit);
   return clone(rows);
 }

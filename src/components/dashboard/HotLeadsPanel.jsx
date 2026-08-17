@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Flame, Droplet, Clock, TrendingUp, UserX } from "lucide-react";
+import { Flame, Droplet, Clock, TrendingUp, TrendingDown, UserX } from "lucide-react";
 import ChartCard from "../ui/ChartCard.jsx";
 import Avatar from "../ui/Avatar.jsx";
 import { SkeletonBlock } from "../ui/Skeleton.jsx";
@@ -32,12 +32,24 @@ const MODES = [
 
 // Badge lý do hiển thị ở mode "urgent" (gộp) để phân biệt lead này thuộc
 // nhóm nào trong 4 nhóm ưu tiên — badge riêng cho followup/hot dùng lại
-// FollowUpBadge/ScoreBadge hiện có, 2 cái còn lại (unassigned, changed) cần
-// icon + màu riêng vì không có badge sẵn nào diễn tả đúng ý.
+// FollowUpBadge/ScoreBadge hiện có. Riêng "unassigned" có style cố định,
+// còn "changed" phải tính style THEO DẤU của swing (xem ChangedStyle bên
+// dưới) vì biến động lớn nhất có thể là tăng HOẶC giảm điểm.
 const urgentReasonBadge = {
   unassigned: { Icon: UserX, label: "Chưa phân công", className: "bg-orange-50 text-orange-700 border border-orange-200" },
-  changed: { Icon: TrendingUp, label: "Điểm tăng mạnh", className: "bg-amber-50 text-amber-700 border border-amber-200" },
 };
+
+// Style + nhãn cho badge "changed" — PHẢI đọc đúng dấu của swing, vì biến
+// động lớn nhất trong breakdown của lead có thể là một mục TRỪ điểm (ví dụ
+// "Lead giả hoặc spam" -100, "Thông báo không có nhu cầu" -30...). Nếu luôn
+// hiển thị dấu "+" và nhãn "tăng mạnh" bất kể dấu thật của swing, Sales sẽ
+// hiểu nhầm một lead đang xấu đi thành đang tốt lên.
+function changedStyle(swing) {
+  if (swing < 0) {
+    return { Icon: TrendingDown, label: "Điểm giảm mạnh", className: "bg-red-50 text-red-700 border border-red-200", text: `${swing}đ` };
+  }
+  return { Icon: TrendingUp, label: "Điểm tăng mạnh", className: "bg-amber-50 text-amber-700 border border-amber-200", text: `+${swing}đ` };
+}
 
 const emptyCopy = {
   urgent: { title: "Không có lead cần xử lý ngay", description: "Danh sách sẽ hiện khi có lead nóng chưa liên hệ, follow-up quá hạn, lead mới chưa phân công, hoặc lead tăng điểm mạnh hôm nay." },
@@ -81,11 +93,20 @@ function ScoreBadge({ score }) {
 }
 
 function ReasonBadge({ reason, swing }) {
+  if (reason === "changed") {
+    const s = changedStyle(swing);
+    const { Icon } = s;
+    return (
+      <span className={`flex items-center gap-1 text-xs font-semibold px-1.5 py-0.5 rounded-md ${s.className}`}>
+        <Icon size={11} /> {s.text}
+      </span>
+    );
+  }
   const cfg = urgentReasonBadge[reason];
   const { Icon } = cfg;
   return (
     <span className={`flex items-center gap-1 text-xs font-semibold px-1.5 py-0.5 rounded-md ${cfg.className}`}>
-      <Icon size={11} /> {reason === "changed" && swing ? `+${swing}đ` : cfg.label}
+      <Icon size={11} /> {cfg.label}
     </span>
   );
 }
