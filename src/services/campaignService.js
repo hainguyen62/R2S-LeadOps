@@ -82,17 +82,21 @@ export async function fetchCampaignTrend(id) {
   const { items } = await fetchLeads({ campaign: campaign.name, pageSize: 1000 });
   const byDay = new Map();
   for (const l of items) {
-    const day = (l.date || "").split(" ")[0]; // "dd/mm/yyyy hh:mm" -> "dd/mm/yyyy"
-    if (!day) continue;
-    byDay.set(day, (byDay.get(day) || 0) + 1);
+    const full = (l.date || "").split(" ")[0]; // "dd/mm/yyyy hh:mm" -> "dd/mm/yyyy"
+    if (!full) continue;
+    byDay.set(full, (byDay.get(full) || 0) + 1);
   }
   return [...byDay.entries()]
-    .map(([date, count]) => ({ date, count }))
+    .map(([full, count]) => {
+      const [d, m] = full.split("/");
+      return { day: `${d}/${m}`, value: count, _full: full }; // "day"/"value" khớp field mà CampaignDetails.jsx (chart + parseTrendDay) đang đọc
+    })
     .sort((a, b) => {
-      const [d1, m1, y1] = a.date.split("/").map(Number);
-      const [d2, m2, y2] = b.date.split("/").map(Number);
+      const [d1, m1, y1] = a._full.split("/").map(Number);
+      const [d2, m2, y2] = b._full.split("/").map(Number);
       return new Date(y1, m1 - 1, d1) - new Date(y2, m2 - 1, d2);
-    });
+    })
+    .map(({ _full, ...rest }) => rest);
 }
 
 export async function createCampaign(payload) {

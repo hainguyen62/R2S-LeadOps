@@ -188,7 +188,9 @@ export function priorityTier(score) {
 
 // Suy ra ngày/giờ từ chuỗi "dd/mm/yyyy hh:mm" (định dạng dùng trong `date`,
 // lịch sử chăm sóc...) hoặc ISO string. Trả về null nếu không parse được.
-function parseVnDate(str) {
+// Export để dashboardService.js dùng chung khi xác định lead "thay đổi điểm
+// mạnh trong ngày" (xem fetchChangedTodayLeads).
+export function parseVnDate(str) {
   if (!str) return null;
   if (str instanceof Date) return str;
   if (/^\d{4}-\d{2}-\d{2}/.test(str)) return new Date(str);
@@ -197,6 +199,21 @@ function parseVnDate(str) {
   const [hh, mm] = timePart.split(":").map(Number);
   if (!d || !m || !y) return null;
   return new Date(y, m - 1, d, hh || 0, mm || 0);
+}
+
+/**
+ * Biến động điểm lớn nhất trong lần tính điểm gần nhất của lead — dùng để
+ * xếp hạng "Lead thay đổi điểm mạnh trong ngày" (Mục XI.2 danh sách hành
+ * động) khi backend CHƯA có API lịch sử điểm (lead_score_events, Mục IX) để
+ * biết chính xác mức tăng/giảm thật giữa 2 lần chấm điểm liên tiếp. Đây là
+ * giá trị SUY RA từ breakdown hiện tại (tín hiệu cộng/trừ điểm lớn nhất đang
+ * áp dụng cho lead), không phải delta thật giữa 2 thời điểm — chỉ dùng cho
+ * mục đích demo/tham khảo cho tới khi có API thật.
+ */
+export function largestScoreSwing(lead) {
+  const breakdown = getScoreBreakdown(lead);
+  if (breakdown.length === 0) return 0;
+  return Math.max(...breakdown.map((b) => Math.abs(Number(b.value))));
 }
 
 /**

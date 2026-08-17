@@ -347,7 +347,7 @@ export default function LeadDetail() {
     }
     setAssigning(true);
     try {
-      await assignLead(lead.id, { assignee: selected.name, ownerId: selected.id, reason: assignForm.reason.trim() || undefined });
+      await assignLead(lead.id, { assignee: selected.name, ownerId: selected.id, reason: assignForm.reason.trim() || undefined, actorName: user?.name });
       await refreshLead();
       toast.success(`Đã phân công lead cho ${selected.name}.`);
       setAssignOpen(false);
@@ -384,18 +384,25 @@ export default function LeadDetail() {
     }
   };
 
-  // PUT /api/leads/{id} (cập nhật next_follow_up_at) — xem leadService.js
+  // POST /api/leads/{id}/activities với nextActionAt (không dùng PUT /leads/{id} —
+  // UpdateLeadRequest không có field này) — xem services/leadService.js
   const handleSaveFollowUp = async (e) => {
     e.preventDefault();
     if (!followUpForm.datetime) return;
     setSavingFollowUp(true);
     try {
-      await updateLead(lead.id, { nextFollowUpAt: new Date(followUpForm.datetime).toISOString() });
+      const nextActionAt = new Date(followUpForm.datetime).toISOString();
       const formatted = new Date(followUpForm.datetime).toLocaleString("vi-VN");
+      // Backend không có field nextFollowUpAt trong UpdateLeadRequest (PUT /leads/{id}),
+      // nên KHÔNG dùng updateLead ở đây — nó sẽ bị lược bỏ âm thầm. Theo đúng spec,
+      // thời gian follow-up phải gửi qua nextActionAt của CreateActivityRequest
+      // (POST /leads/{id}/activities); backend tự cập nhật LeadResponse.nextActionAt.
       await addLeadActivity(lead.id, {
         text: `Đặt lịch follow-up lúc ${formatted}${followUpForm.note.trim() ? ` — Ghi chú: ${followUpForm.note.trim()}` : ""}`,
         channel: lead.assignee || "Hệ thống",
         activityType: "FOLLOW_UP",
+        nextAction: followUpForm.note.trim() || undefined,
+        nextActionAt,
       });
       await refreshLead();
       toast.success("Đã đặt lịch follow-up.");

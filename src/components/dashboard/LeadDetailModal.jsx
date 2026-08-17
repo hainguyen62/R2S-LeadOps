@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, Facebook, Send, UserCheck, Flame, Droplet, Maximize2, ChevronDown, Check } from "lucide-react";
+import { X, Facebook, Send, UserCheck, Flame, Droplet, Maximize2, ChevronDown, Check, Clock, CalendarClock, Loader2 } from "lucide-react";
 import Pill from "../ui/Pill.jsx";
 import Avatar from "../ui/Avatar.jsx";
 import ContactButtons from "../ui/ContactButtons.jsx";
 import { useToast } from "../ui/ToastProvider.jsx";
 import { statusStyle, classStyle, careHistory, leadStatusOrder } from "../../data/mockData.js";
 import { priorityTier, getScoreBreakdown } from "../../utils/leadScoring.js";
+import { addLeadActivity } from "../../services/leadService.js";
 
 // Cùng bộ 3 cấp độ ưu tiên với "Lead cần xử lý ngay" ở Dashboard, để icon
 // lửa/giọt nước nhất quán xuyên suốt ứng dụng.
@@ -42,11 +43,14 @@ const priorityStyles = {
  * không gian cố định bên phải như trước. Chỉ hiển thị khi có `lead`
  * được chọn; đóng bằng nút X, click ra ngoài, hoặc phím Esc.
  */
-export default function LeadDetailModal({ lead, onClose }) {
+export default function LeadDetailModal({ lead, onClose, onRefresh }) {
   const navigate = useNavigate();
   const toast = useToast();
   const [statusOpen, setStatusOpen] = useState(false);
   const [, forceRefresh] = useState(0);
+  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [followUpForm, setFollowUpForm] = useState({ datetime: "", note: "" });
+  const [savingFollowUp, setSavingFollowUp] = useState(false);
 
   useEffect(() => {
     if (lead) {
@@ -84,6 +88,33 @@ export default function LeadDetailModal({ lead, onClose }) {
     forceRefresh((n) => n + 1);
   };
 
+  // POST /api/leads/{id}/activities với nextActionAt (không dùng PUT /leads/{id} —
+  // UpdateLeadRequest không có field này) — cùng cách làm với trang chi tiết đầy đủ.
+  const handleSaveFollowUp = async (e) => {
+    e.preventDefault();
+    if (!followUpForm.datetime) return;
+    setSavingFollowUp(true);
+    try {
+      const nextActionAt = new Date(followUpForm.datetime).toISOString();
+      const formatted = new Date(followUpForm.datetime).toLocaleString("vi-VN");
+      await addLeadActivity(lead.id, {
+        text: `Đặt lịch follow-up lúc ${formatted}${followUpForm.note.trim() ? ` — Ghi chú: ${followUpForm.note.trim()}` : ""}`,
+        channel: lead.assignee || "Hệ thống",
+        activityType: "FOLLOW_UP",
+        nextAction: followUpForm.note.trim() || undefined,
+        nextActionAt,
+      });
+      toast.success("Đã lưu lịch follow-up.");
+      setFollowUpOpen(false);
+      setFollowUpForm({ datetime: "", note: "" });
+      onRefresh?.();
+    } catch (err) {
+      toast.error(err.message || "Lưu lịch follow-up thất bại.");
+    } finally {
+      setSavingFollowUp(false);
+    }
+  };
+
   const history = careHistory[lead.id] || careHistory[1] || [];
   const breakdown = getScoreBreakdown(lead);
   const tier = priorityTier(lead.score);
@@ -91,6 +122,7 @@ export default function LeadDetailModal({ lead, onClose }) {
   const PriorityIcon = style.Icon;
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
@@ -155,6 +187,38 @@ export default function LeadDetailModal({ lead, onClose }) {
           <div>
             <p className="text-xs font-medium text-slate-700 mb-2">Liên hệ nhanh</p>
             <ContactButtons lead={lead} />
+          </div>
+
+          {/* Lịch follow-up — trước đây chỉ có ở trang "Xem đầy đủ", giờ thêm ở
+              đây để không phải rời popup mới đặt/xem được lịch follow-up. */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-xs font-medium text-slate-700">Lịch follow-up</p>
+              <button
+                onClick={() => {
+                  setFollowUpForm({ datetime: lead.nextFollowUpAt ? lead.nextFollowUpAt.slice(0, 16) : "", note: "" });
+                  setFollowUpOpen(true);
+                }}
+                className="flex items-center gap-1 text-[11px] text-brand-600 hover:underline font-medium"
+              >
+                <CalendarClock size={12} /> {lead.nextFollowUpAt ? "Đổi lịch" : "Đặt lịch"}
+              </button>
+            </div>
+            {lead.nextFollowUpAt ? (
+              <div
+                className={`flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1.5 border ${
+                  new Date(lead.nextFollowUpAt) <= new Date()
+                    ? "bg-red-50 text-red-800 border-red-200"
+                    : "bg-amber-50 text-amber-700 border-amber-200"
+                }`}
+              >
+                <Clock size={12} />
+                {new Date(lead.nextFollowUpAt).toLocaleString("vi-VN")}
+                {new Date(lead.nextFollowUpAt) <= new Date() ? " (quá hạn)" : ""}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400">Chưa có lịch follow-up.</p>
+            )}
           </div>
 
           <div
@@ -245,5 +309,57 @@ export default function LeadDetailModal({ lead, onClose }) {
         </div>
       </div>
     </div>
+
+    {/* ---- Modal: Đặt lịch follow-up (nằm trên popup chi tiết) ---- */}
+    {followUpOpen && (
+      <div className="fixed inset-0 z-[60] bg-slate-900/50 flex items-center justify-center p-4">
+        <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-sm shadow-elevated">
+          <div className="flex items-center justify-between px-6 pt-6 pb-2">
+            <h3 className="font-semibold text-slate-900">Đặt lịch follow-up</h3>
+            <button onClick={() => setFollowUpOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <X size={18} />
+            </button>
+          </div>
+          <form onSubmit={handleSaveFollowUp} className="px-6 pb-6 space-y-3">
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Thời gian cần liên hệ lại *</label>
+              <input
+                type="datetime-local"
+                value={followUpForm.datetime}
+                onChange={(e) => setFollowUpForm({ ...followUpForm, datetime: e.target.value })}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Ghi chú (tùy chọn)</label>
+              <input
+                value={followUpForm.note}
+                onChange={(e) => setFollowUpForm({ ...followUpForm, note: e.target.value })}
+                placeholder="VD: Gọi lại hỏi về học phí..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setFollowUpOpen(false)}
+                className="flex-1 border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                disabled={savingFollowUp || !followUpForm.datetime}
+                className="flex-1 bg-brand-600 hover:bg-brand-500 rounded-lg py-2 text-sm text-white disabled:opacity-60 inline-flex items-center justify-center gap-1.5"
+              >
+                {savingFollowUp && <Loader2 size={14} className="animate-spin" />}
+                {savingFollowUp ? "Đang lưu..." : "Lưu lịch follow-up"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

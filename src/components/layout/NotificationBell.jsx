@@ -146,11 +146,28 @@ export default function NotificationBell() {
   // card có transform...) đè lên trên do khác ngữ cảnh xếp lớp (stacking context).
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return;
-    const rect = btnRef.current.getBoundingClientRect();
-    setCoords({
-      top: rect.bottom + 8,
-      right: window.innerWidth - rect.right,
-    });
+
+    const updateCoords = () => {
+      const rect = btnRef.current.getBoundingClientRect();
+      setCoords({
+        top: rect.bottom + 8,
+        right: window.innerWidth - rect.right,
+      });
+    };
+
+    updateCoords();
+
+    // Topbar chứa nút chuông đã "sticky top-0", nên vị trí chuông trên màn
+    // hình không đổi khi cuộn trang — nhưng vẫn lắng nghe scroll/resize để
+    // panel luôn bám đúng nút chuông trong mọi trường hợp (đổi kích thước
+    // cửa sổ, thanh địa chỉ trình duyệt mobile ẩn/hiện làm đổi viewport...).
+    // Dùng { passive: true } vì chỉ đọc vị trí, không chặn cuộn trang.
+    window.addEventListener("scroll", updateCoords, { passive: true, capture: true });
+    window.addEventListener("resize", updateCoords);
+    return () => {
+      window.removeEventListener("scroll", updateCoords, { capture: true });
+      window.removeEventListener("resize", updateCoords);
+    };
   }, [open]);
 
   useEffect(() => {

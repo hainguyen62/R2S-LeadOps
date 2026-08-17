@@ -12,7 +12,7 @@ import {
   leads as mockLeads,
   leadStatusOrder,
 } from "../data/mockData.js";
-import { priorityTier, classify } from "../utils/leadScoring.js";
+import { priorityTier, classify, parseVnDate, largestScoreSwing } from "../utils/leadScoring.js";
 
 function clone(obj) {
   return typeof structuredClone === "function" ? structuredClone(obj) : JSON.parse(JSON.stringify(obj));
@@ -288,11 +288,23 @@ function mapTopLeadToUi(l) {
   return { id: l.leadId, name: l.fullName, initials: toInitials(l.fullName), score: l.totalScore, assignee: l.ownerName || undefined, course: "" };
 }
 
-/** GET /dashboard/top-leads — top lead điểm cao nhất, không lọc theo trạng thái "chưa liên hệ" như bản mock */
+/**
+ * GET /dashboard/top-leads — "Lead nóng chưa liên hệ" (Mục XI.2 danh sách
+ * hành động). Backend chỉ trả top N lead điểm cao nhất theo tổng điểm, KHÔNG
+ * có tham số lọc theo trạng thái "chưa liên hệ" — nếu dùng thẳng kết quả này,
+ * danh sách sẽ lẫn cả lead nóng ĐÃ liên hệ rồi, sai tiêu chí nghiệp vụ.
+ * Giải pháp tạm (cho tới khi TTS2 bổ sung tham số lọc trạng thái ở backend):
+ * lấy dư số lượng tối đa API cho phép (100), rồi tự lọc lại leadStage="NEW"
+ * (đúng nghĩa "chưa liên hệ" — bước đầu tiên trong luồng trạng thái) ở phía
+ * Front-end trước khi cắt còn đúng `limit` bản ghi cần hiển thị.
+ */
 export async function fetchHotLeads(limit = 5) {
   if (!USE_MOCK) {
-    const rows = await apiFetch("/dashboard/top-leads", { params: { limit } });
-    return rows.map(mapTopLeadToUi);
+    const rows = await apiFetch("/dashboard/top-leads", { params: { limit: 100 } });
+    return rows
+      .filter((l) => l.leadStage === "NEW")
+      .slice(0, limit)
+      .map(mapTopLeadToUi);
   }
   await mockDelay(300);
   const rows = [...mockLeads]
@@ -323,6 +335,95 @@ export async function fetchFollowUpLeads(limit = 5) {
     .sort((a, b) => new Date(a.nextFollowUpAt) - new Date(b.nextFollowUpAt))
     .slice(0, limit);
   return clone(rows);
+}
+
+/**
+ * "Lead thay đổi điểm mạnh trong ngày" — mục thứ 4 trong Danh sách hành động
+ * (Mục XI.2 tài liệu BA), còn thiếu so với 3 mục đã có (nóng chưa liên hệ,
+ * chưa phân công, follow-up). Backend hiện KHÔNG có endpoint lịch sử điểm
+ * (bảng lead_score_events, Mục IX kế hoạch gốc — đã báo cáo ở vấn đề #3 Mục
+ * 5) nên Front-end không có cách nào biết CHÍNH XÁC lead nào vừa tăng/giảm
+ * điểm hôm nay và tăng/giảm bao nhiêu — cần TTS2 bổ sung API mới xác định
+ * đúng được. Báo lỗi rõ ràng cho trường hợp dùng API thật thay vì hiển thị
+ * số liệu suy diễn sai lệch.
+ */
+export async function fetchChangedTodayLeads(limit = 5) {
+  if (!USE_MOCK) {
+    throw new ApiError(
+      'Backend chưa có API lịch sử thay đổi điểm ("lead_score_events" theo Mục IX kế hoạch gốc) nên chưa thể xác định lead nào thay đổi điểm mạnh trong ngày. Cần trao đổi với TTS2 để bổ sung.',
+      { status: 501, code: "NOT_IMPLEMENTED_BY_BACKEND" }
+    );
+  }
+  await mockDelay(300);
+
+  // Dữ liệu demo có ngày cố định (không phải ngày thực tế hôm nay), nên lấy
+  // NGÀY GẦN NHẤT có lead được tính điểm trong tập mock làm mốc "hôm nay",
+  // rồi xếp hạng theo biến động điểm lớn nhất suy ra từ breakdown hiện tại
+  // (xem largestScoreSwing trong utils/leadScoring.js).
+  const withDate = mockLeads
+    .map((l) => ({ lead: l, refDate: parseVnDate(l.scoreUpdatedAt || l.date) }))
+    .filter((x) => x.refDate);
+  if (withDate.length === 0) return [];
+
+  const latestDayKey = withDate
+    .reduce((max, x) => (x.refDate > max ? x.refDate : max), withDate[0].refDate)
+    .toDateString();
+
+  const rows = withDate
+    .filter((x) => x.refDate.toDateString() === latestDayKey)
+    .map((x) => ({ ...x.lead, swing: largestScoreSwing(x.lead) }))
+    .filter((l) => l.swing > 0)
+    .sort((a, b) => b.swing - a.swing)
+    .slice(0, limit);
+  return clone(rows);
+}
+
+/**
+ * "Lead cần xử lý ngay" — gộp cả 4 mục trong Danh sách hành động (Mục XI.2
+ * tài liệu BA) vào MỘT danh sách duy nhất, xếp theo đúng thứ tự ưu tiên:
+ *   1. 🔴 Lead nóng (70–100đ) chưa liên hệ — ưu tiên cao nhất, quy định
+ *      phải phân công trong 10 phút giờ làm việc.
+ *   2. 🔴 Follow-up quá hạn — đã đến hẹn nhưng Sales chưa xử lý.
+ *   3. 🟠 Lead mới chưa phân công — quy định phải có người phụ trách trong ngày.
+ *   4. 🟡 Lead thay đổi điểm mạnh trong ngày — cần Sales xem lại.
+ * Một lead có thể rơi vào nhiều nhóm cùng lúc (vd: vừa nóng vừa chưa phân
+ * công) — chỉ giữ 1 dòng duy nhất, gắn theo lý do có mức ưu tiên CAO NHẤT
+ * mà lead đó thỏa (urgentReason), để tránh liệt kê trùng lead trong danh sách.
+ */
+export async function fetchUrgentLeads(limit = 5) {
+  if (!USE_MOCK) {
+    // Cần đủ cả 3 API còn thiếu (unassigned-leads, followup-leads, và dữ
+    // liệu lead_score_events cho "changed") mới gộp đúng — xem ghi chú ở
+    // từng hàm fetch riêng lẻ bên trên/dưới. Báo lỗi rõ thay vì gộp thiếu.
+    throw new ApiError(
+      'Backend chưa có đủ API cần thiết (unassigned-leads, followup-leads, lead-score-events) để gộp "Lead cần xử lý ngay". Cần trao đổi với TTS2.',
+      { status: 501, code: "NOT_IMPLEMENTED_BY_BACKEND" }
+    );
+  }
+  await mockDelay(300);
+
+  // Lấy dư từ mỗi nguồn (không giới hạn đúng `limit` ngay) để sau khi khử
+  // trùng lặp giữa các nhóm vẫn đủ dữ liệu lấp đầy `limit` dòng cuối cùng.
+  const POOL = Math.max(limit * 4, 20);
+  const buckets = [
+    { rows: await fetchHotLeads(POOL), reason: "hot" },
+    { rows: await fetchFollowUpLeads(POOL), reason: "followup" },
+    { rows: await fetchUnassignedLeads(POOL), reason: "unassigned" },
+    { rows: await fetchChangedTodayLeads(POOL), reason: "changed" },
+  ];
+
+  const seen = new Set();
+  const merged = [];
+  for (const { rows, reason } of buckets) {
+    if (merged.length >= limit) break;
+    for (const l of rows) {
+      if (merged.length >= limit) break;
+      if (seen.has(l.id)) continue;
+      seen.add(l.id);
+      merged.push({ ...l, urgentReason: reason });
+    }
+  }
+  return merged;
 }
 
 /** Backend chưa có endpoint conversion-trend */

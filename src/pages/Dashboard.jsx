@@ -125,6 +125,11 @@ export default function Dashboard() {
   }, [days, courseFilter, statusFilter, hasChartFilter]);
 
   // Khi chọn 1 hot lead, tải chi tiết lead qua leadService để hiện modal
+  const refreshSelectedLead = () => {
+    if (!selectedId) return;
+    fetchLeadById(selectedId).then((l) => setSelectedLead(l));
+  };
+
   useEffect(() => {
     if (!selectedId) {
       setSelectedLead(null);
@@ -261,7 +266,7 @@ export default function Dashboard() {
       </div>
 
       {/* Click 1 lead -> popup chi tiết (không chiếm không gian cố định) */}
-      <LeadDetailModal lead={selectedLead} onClose={() => setSelectedId(null)} />
+      <LeadDetailModal lead={selectedLead} onClose={() => setSelectedId(null)} onRefresh={refreshSelectedLead} />
 
       {/* Click KPI / nguồn / trạng thái -> danh sách lead tương ứng */}
       {leadDrill && (

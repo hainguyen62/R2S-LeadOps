@@ -26,7 +26,7 @@ import { fetchCampaigns } from "../services/campaignService.js";
 import { exportToCsv } from "../utils/exportCsv.js";
 import { useNavigate } from "react-router-dom";
 import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
-import { getCategoryColor, tint } from "../utils/chartColors.js";
+import { getCategoryColor } from "../utils/chartColors.js";
 import { Cell } from "recharts";
 
 // Tên hiển thị "Nóng/Ấm/Lạnh" (dùng trong classification/donut) -> giá trị
@@ -328,27 +328,21 @@ export default function Reports() {
                 <Bar
                   dataKey="leads"
                   name="Lead"
+                  fill="#3b82f6"
                   radius={[4, 4, 0, 0]}
                   maxBarSize={28}
                   cursor="pointer"
                   onClick={(data) => setDrillCampaign(data)}
-                >
-                  {campaignReport.map((c) => (
-                    <Cell key={c.id} fill={getCategoryColor(c.name)} />
-                  ))}
-                </Bar>
+                />
                 <Bar
                   dataKey="registrations"
                   name="Đã đăng ký"
+                  fill="#22c55e"
                   radius={[4, 4, 0, 0]}
                   maxBarSize={28}
                   cursor="pointer"
                   onClick={(data) => setDrillCampaign(data)}
-                >
-                  {campaignReport.map((c) => (
-                    <Cell key={c.id} fill={tint(getCategoryColor(c.name), 0.5)} />
-                  ))}
-                </Bar>
+                />
               </BarChart>
             </ResponsiveContainer>
 

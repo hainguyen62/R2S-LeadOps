@@ -510,8 +510,10 @@ export async function updateLeadStatus(id, { newStatus, reason, note } = {}) {
   return clone(mockLeads[idx]);
 }
 
-/** PATCH /api/leads/{id}/assignment — phân công / chuyển người phụ trách */
-export async function assignLead(id, { assignee, ownerId, reason } = {}) {
+/** PATCH /api/leads/{id}/assignment — phân công / chuyển người phụ trách
+ *  actorName: tên người ĐANG thực hiện thao tác (lấy từ useAuth() ở phía UI) — dùng để
+ *  ghi đúng "ai" phân công vào lịch sử hoạt động, thay vì hardcode "Leader Marketing". */
+export async function assignLead(id, { assignee, ownerId, reason, actorName } = {}) {
   if (!USE_MOCK) {
     // AssignLeadRequest chỉ nhận { ownerId: number } — không có field "reason".
     // "assignee" ở mock đang là TÊN nhân viên; cần đổi UI sang chọn theo id
@@ -528,8 +530,8 @@ export async function assignLead(id, { assignee, ownerId, reason } = {}) {
   const oldAssignee = mockLeads[idx].assignee;
   mockLeads[idx].assignee = assignee;
   appendActivity(id, {
-    text: `Chuyển phụ trách từ "${oldAssignee || "Chưa phân công"}" sang "${assignee}"`,
-    channel: reason || "Leader Marketing",
+    text: `Chuyển phụ trách từ "${oldAssignee || "Chưa phân công"}" sang "${assignee}"${reason ? ` — Lý do: ${reason}` : ""}`,
+    channel: actorName || "Hệ thống",
     date: new Date().toLocaleString("vi-VN"),
   });
   return clone(mockLeads[idx]);
@@ -622,6 +624,9 @@ function appendActivity(id, activity) {
 
   // Mục VII.5: hệ thống tính lại điểm khi lead có hành động chăm sóc mới.
   const idx = mockLeads.findIndex((l) => matchId(l.id, id));
+  // Giả lập hành vi backend thật: nextActionAt của activity sẽ được backend
+  // dùng để cập nhật LeadResponse.nextActionAt (UI đọc qua lead.nextFollowUpAt).
+  if (idx !== -1 && activity.nextActionAt) mockLeads[idx].nextFollowUpAt = activity.nextActionAt;
   if (idx !== -1) mockLeads[idx].scoreUpdatedAt = entry.date;
 
   return clone(entry);
