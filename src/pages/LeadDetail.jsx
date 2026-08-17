@@ -181,6 +181,20 @@ export default function LeadDetail() {
     };
   }, [lead?.campaign, user]);
 
+  // GET /leads/{id}/appointments — chỉ có dữ liệu khi kết nối API thật (Mục 4.1)
+  // Hook này phải được khai báo trước các nhánh return loading/error để thứ tự
+  // Hooks không thay đổi giữa lần render đầu và sau khi tải lead xong.
+  const refreshAppointments = () => {
+    setApptLoading(true);
+    fetchLeadAppointments(id, { pageSize: 50 })
+      .then(({ items }) => setAppointments(items))
+      .catch(() => setAppointments([]))
+      .finally(() => setApptLoading(false));
+  };
+  useEffect(() => {
+    refreshAppointments();
+  }, [id]);
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -242,18 +256,6 @@ export default function LeadDetail() {
       setUpdatingStatus(false);
     }
   };
-
-  // GET /leads/{id}/appointments — chỉ có dữ liệu khi kết nối API thật (Mục 4.1)
-  const refreshAppointments = () => {
-    setApptLoading(true);
-    fetchLeadAppointments(id, { pageSize: 50 })
-      .then(({ items }) => setAppointments(items))
-      .catch(() => setAppointments([]))
-      .finally(() => setApptLoading(false));
-  };
-  useEffect(() => {
-    refreshAppointments();
-  }, [id]);
 
   const refreshLead = async () => {
     const [l, h, se] = await Promise.all([fetchLeadById(lead.id), fetchLeadActivities(lead.id), fetchLeadScoreEvents(lead.id)]);
