@@ -74,6 +74,11 @@ export async function fetchWebhookEvents({ limit = 50 } = {}) {
   return clone(loadEvents().slice(0, limit));
 }
 
+/** Xóa toàn bộ nhật ký webhook (chỉ xóa log — không ảnh hưởng secret token hay lead đã tạo). */
+export function clearWebhookEvents() {
+  getStorage()?.removeItem(EVENTS_KEY);
+}
+
 /**
  * Nhận payload từ Google Apps Script (trigger onFormSubmit của Google Form).
  * payload dự kiến (đặt tên cột trong Google Sheet trùng các key này):

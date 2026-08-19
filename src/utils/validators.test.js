@@ -98,16 +98,16 @@ describe("validateLoginForm", () => {
 });
 
 describe("validateRegisterForm", () => {
-  it("báo lỗi khi mật khẩu dưới 6 ký tự", () => {
-    const errors = validateRegisterForm({ name: "A", email: "a@b.com", password: "123" });
+  it("báo lỗi khi mật khẩu dưới 8 ký tự", () => {
+    const errors = validateRegisterForm({ name: "A", email: "a@b.com", password: "1234567" });
     expect(errors.password).toBeDefined();
   });
   it("báo lỗi khi xác nhận mật khẩu không khớp", () => {
-    const errors = validateRegisterForm({ name: "A", email: "a@b.com", password: "123456", confirmPassword: "654321" });
+    const errors = validateRegisterForm({ name: "A", email: "a@b.com", password: "12345678", confirmPassword: "87654321" });
     expect(errors.confirmPassword).toBeDefined();
   });
   it("hợp lệ khi đủ thông tin và mật khẩu khớp", () => {
-    const errors = validateRegisterForm({ name: "A", email: "a@b.com", password: "123456", confirmPassword: "123456" });
+    const errors = validateRegisterForm({ name: "A", email: "a@b.com", password: "12345678", confirmPassword: "12345678" });
     expect(hasErrors(errors)).toBe(false);
   });
 });

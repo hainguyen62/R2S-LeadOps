@@ -7,7 +7,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext.jsx";
 import { canAccessPath, getHomePath } from "./utils/permissions.js";
 import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.jsx";
-import RegisterStaff from "./pages/RegisterStaff.jsx";
+import CreateAccount from "./pages/CreateAccount.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Leads from "./pages/Leads.jsx";
 import LeadDetail from "./pages/LeadDetail.jsx";
@@ -58,7 +58,6 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login onLogin={handleLogin} />} />
-        <Route path="/register" element={<RegisterStaff />} />
         <Route path="/consultation" element={<Consultation />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -77,6 +76,7 @@ export default function App() {
           <Route path="/history" element={<RequireAccess><History /></RequireAccess>} />
           <Route path="/reports" element={<RequireAccess><Reports /></RequireAccess>} />
           <Route path="/settings" element={<RequireAccess><Settings /></RequireAccess>} />
+          <Route path="/settings/create-account" element={<RequireAccess><CreateAccount /></RequireAccess>} />
           <Route path="/integrations" element={<RequireAccess><Integrations /></RequireAccess>} />
           <Route path="/vouchers" element={<RequireAccess><Vouchers /></RequireAccess>} />
           <Route path="/courses" element={<RequireAccess><Courses /></RequireAccess>} />

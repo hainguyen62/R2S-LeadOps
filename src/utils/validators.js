@@ -82,14 +82,14 @@ export function validateLoginForm({ email, password }) {
   return errors;
 }
 
-/** Validate form đăng ký tài khoản — mật khẩu tối thiểu 6 ký tự, xác nhận khớp. */
+/** Validate form đăng ký tài khoản — mật khẩu tối thiểu 8 ký tự (khớp CreateAccountRequest.password minLength: 8), xác nhận khớp. */
 export function validateRegisterForm({ name, email, password, confirmPassword }) {
   const errors = {};
   if (!isRequired(name)) errors.name = "Vui lòng nhập họ và tên.";
   if (!isRequired(email)) errors.email = "Vui lòng nhập email.";
   else if (!isValidEmail(email)) errors.email = "Email không đúng định dạng.";
   if (!isRequired(password)) errors.password = "Vui lòng nhập mật khẩu.";
-  else if (String(password).length < 6) errors.password = "Mật khẩu cần tối thiểu 6 ký tự.";
+  else if (String(password).length < 8) errors.password = "Mật khẩu cần tối thiểu 8 ký tự.";
   if (confirmPassword !== undefined && password !== confirmPassword) {
     errors.confirmPassword = "Xác nhận mật khẩu không khớp.";
   }

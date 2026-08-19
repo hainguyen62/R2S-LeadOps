@@ -5,6 +5,7 @@
 
 import { apiFetch, USE_MOCK, mockDelay, setToken, ApiError } from "./apiClient.js";
 import { users as mockUsers } from "../data/mockData.js";
+import { mapRoleEnumToLabel, mapStatusEnumToLabel } from "../utils/roleMapping.js";
 
 // Tài khoản test cho môi trường Development/Demo — xem Login.jsx.
 // Mật khẩu demo dùng chung: "123456" (KHÔNG phải cách lưu mật khẩu thật;
@@ -101,9 +102,31 @@ export async function logout() {
   setToken(null);
 }
 
-/** GET /auth/me — khôi phục phiên khi reload trang */
+/**
+ * GET /auth/me — khôi phục phiên khi reload trang.
+ * CurrentUserResponse thật chỉ có "fullName" (không có "name"), nhưng toàn bộ
+ * UI hiện tại (Topbar, NotificationBell, LeadDetail, Leads, History, Settings...)
+ * đều đọc "user.name". Map lại ở đây — nguồn duy nhất trả về user — để không
+ * phải sửa lại từng nơi đang dùng "user.name".
+ *
+ * QUAN TRỌNG: cũng phải map "role"/"status" từ enum Backend (ADMIN/MANAGER/
+ * STAFF, ACTIVE/LOCKED) sang nhãn tiếng Việt (xem utils/roleMapping.js) —
+ * đây là user object nuôi thẳng AuthContext/permissions.js (App.jsx), nếu
+ * không map thì permissions.can()/capsOf() không nhận ra role -> MỌI user
+ * (kể cả Admin) bị fallback về quyền Sales thấp nhất. Dùng đúng 1 hàm map
+ * chung với settingsService.js để tránh lệch nhau như trước đây.
+ */
 export async function fetchCurrentUser() {
-  if (!USE_MOCK) return apiFetch("/auth/me");
+  if (!USE_MOCK) {
+    const res = await apiFetch("/auth/me");
+    if (!res) return res;
+    return {
+      ...res,
+      name: res.fullName,
+      role: mapRoleEnumToLabel(res.role),
+      status: mapStatusEnumToLabel(res.status),
+    };
+  }
   await mockDelay(150);
   return null; // Demo: không tự khôi phục phiên, luôn yêu cầu đăng nhập lại khi reload
 }

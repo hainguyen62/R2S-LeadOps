@@ -6,24 +6,23 @@
 import { apiFetch, USE_MOCK, mockDelay, ApiError, unwrapPage, toBackendPaging } from "./apiClient.js";
 import { users as mockUsers, activityLogs as mockActivityLogs, currentUserProfile, leads as mockLeads } from "../data/mockData.js";
 import { mapLeadResponseToUi } from "./leadService.js";
+import { mapRoleEnumToLabel, mapStatusEnumToLabel } from "../utils/roleMapping.js";
 
 function clone(obj) {
   return typeof structuredClone === "function" ? structuredClone(obj) : JSON.parse(JSON.stringify(obj));
 }
 
-const ROLE_ENUM_TO_LABEL = { ADMIN: "Administrator", MANAGER: "Leader Marketing", STAFF: "Sales/Admissions" };
 const ROLE_LABEL_TO_ENUM = { Administrator: "ADMIN", "Leader Marketing": "MANAGER" };
-const STATUS_ENUM_TO_LABEL = { ACTIVE: "Hoạt động", LOCKED: "Đã khóa" };
 
-/** UserResponse (backend) -> đúng field UI đang dùng (name, role, status tiếng Việt). Cách map role chỉ là suy đoán tạm, cần TTS2 xác nhận. */
+/** UserResponse (backend) -> đúng field UI đang dùng (name, role, status tiếng Việt). Cách map role chỉ là suy đoán tạm (STAFF -> Sales/Admissions), cần TTS2 xác nhận — xem utils/roleMapping.js. */
 function mapUserResponseToUi(u) {
   if (!u) return u;
   return {
     id: u.id,
     name: u.fullName,
     email: u.email,
-    role: ROLE_ENUM_TO_LABEL[u.role] || u.role,
-    status: STATUS_ENUM_TO_LABEL[u.status] || u.status,
+    role: mapRoleEnumToLabel(u.role),
+    status: mapStatusEnumToLabel(u.status),
   };
 }
 
@@ -88,8 +87,8 @@ export async function resetUserPassword(id, newPassword) {
   await mockDelay();
   const idx = mockUsers.findIndex((u) => u.id === id);
   if (idx === -1) throw new ApiError("Không tìm thấy người dùng.", { status: 404 });
-  if (!newPassword || String(newPassword).length < 6) {
-    throw new ApiError("Mật khẩu mới cần tối thiểu 6 ký tự.", { status: 400, fieldErrors: { newPassword: "Mật khẩu mới cần tối thiểu 6 ký tự." } });
+  if (!newPassword || String(newPassword).length < 8) {
+    throw new ApiError("Mật khẩu mới cần tối thiểu 8 ký tự.", { status: 400, fieldErrors: { newPassword: "Mật khẩu mới cần tối thiểu 8 ký tự." } });
   }
   return { success: true };
 }

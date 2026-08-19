@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Users, Activity, Bell, Link, ExternalLink, Pencil, Trash2, X, ShieldCheck, Check, Info, ArrowUpDown, ArrowUp, ArrowDown, AlertCircle, Loader2, Lock, Unlock, KeyRound, Eye } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Users, Activity, Bell, Link, ExternalLink, Pencil, Trash2, X, ShieldCheck, Check, Info, ArrowUpDown, ArrowUp, ArrowDown, AlertCircle, Loader2, Lock, Unlock, KeyRound, Eye, UserPlus } from "lucide-react";
 import Avatar from "../components/ui/Avatar.jsx";
 import Pill from "../components/ui/Pill.jsx";
 import ConfirmDialog from "../components/ui/ConfirmDialog.jsx";
@@ -51,6 +52,7 @@ const defaultMatrix = {
 };
 
 export default function Settings() {
+  const navigate = useNavigate();
   const toast = useToast();
   const [tab, setTab] = useState("users");
   const [userList, setUserList] = useState([]);
@@ -228,8 +230,8 @@ export default function Settings() {
   const submitResetPassword = async (e) => {
     e.preventDefault();
     const errors = {};
-    if (!resetForm.newPassword || resetForm.newPassword.length < 6) {
-      errors.newPassword = "Mật khẩu mới cần tối thiểu 6 ký tự.";
+    if (!resetForm.newPassword || resetForm.newPassword.length < 8) {
+      errors.newPassword = "Mật khẩu mới cần tối thiểu 8 ký tự.";
     }
     if (resetForm.confirmPassword !== resetForm.newPassword) {
       errors.confirmPassword = "Xác nhận mật khẩu không khớp.";
@@ -265,9 +267,20 @@ export default function Settings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900">Cài đặt</h2>
-        <p className="text-sm text-slate-500">Quản lý tài khoản, phân quyền, nhật ký hoạt động và cấu hình hệ thống</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Cài đặt</h2>
+          <p className="text-sm text-slate-500">Quản lý tài khoản, phân quyền, nhật ký hoạt động và cấu hình hệ thống</p>
+        </div>
+        {tab === "users" && (
+          <button
+            onClick={() => navigate("/settings/create-account")}
+            className="flex items-center gap-2 rounded-lg bg-brand-700 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"
+          >
+            <UserPlus size={16} />
+            Tạo tài khoản
+          </button>
+        )}
       </div>
 
       <div className="flex gap-2 flex-wrap">
@@ -660,7 +673,7 @@ export default function Settings() {
                   type="password"
                   value={resetForm.newPassword}
                   onChange={(e) => setResetForm({ ...resetForm, newPassword: e.target.value })}
-                  placeholder="Tối thiểu 6 ký tự"
+                  placeholder="Tối thiểu 8 ký tự"
                   className={`w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 ${
                     resetErrors.newPassword ? "border-red-300" : "border-slate-200"
                   }`}

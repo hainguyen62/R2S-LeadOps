@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { RefreshCcw, Copy, Check, Webhook, PlayCircle, ChevronRight, AlertCircle, CheckCircle2, Clock } from "lucide-react";
-import { getWebhookConfig, regenerateWebhookToken, fetchWebhookEvents, receiveGoogleFormWebhook } from "../services/webhookService.js";
+import { RefreshCcw, Copy, Check, Webhook, PlayCircle, ChevronRight, AlertCircle, CheckCircle2, Clock, Trash2 } from "lucide-react";
+import { getWebhookConfig, regenerateWebhookToken, fetchWebhookEvents, receiveGoogleFormWebhook, clearWebhookEvents } from "../services/webhookService.js";
 import { SkeletonBlock } from "../components/ui/Skeleton.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 import ConfirmDialog from "../components/ui/ConfirmDialog.jsx";
@@ -72,6 +72,7 @@ export default function Integrations() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [confirmRegen, setConfirmRegen] = useState(false);
+  const [confirmClearLog, setConfirmClearLog] = useState(false);
   const [testing, setTesting] = useState(false);
   const [refreshTick, forceRefresh] = useState(0);
 
@@ -94,6 +95,13 @@ export default function Integrations() {
     setConfig(cfg);
     setConfirmRegen(false);
     toast.success("Đã cấp secret token mới. Nhớ cập nhật lại Apps Script với token mới này.");
+  };
+
+  const handleClearLog = () => {
+    clearWebhookEvents();
+    setEvents([]);
+    setConfirmClearLog(false);
+    toast.success("Đã xóa toàn bộ nhật ký webhook.");
   };
 
   // Giả lập 1 lượt Google Form gửi dữ liệu thật — để test toàn bộ luồng
@@ -200,9 +208,19 @@ export default function Integrations() {
 
           {/* ---- Log webhook_events ---- */}
           <div className="bg-white border border-slate-200 rounded-xl shadow-card">
-            <div className="px-5 py-4 border-b border-slate-100">
-              <p className="text-sm font-medium text-slate-900">Nhật ký webhook gần đây</p>
-              <p className="text-xs text-slate-500">Đối chiếu khi Form có dữ liệu nhưng không thấy lead xuất hiện.</p>
+            <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-slate-900">Nhật ký webhook gần đây</p>
+                <p className="text-xs text-slate-500">Đối chiếu khi Form có dữ liệu nhưng không thấy lead xuất hiện.</p>
+              </div>
+              {events.length > 0 && (
+                <button
+                  onClick={() => setConfirmClearLog(true)}
+                  className="shrink-0 flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-red-600"
+                >
+                  <Trash2 size={12} /> Xóa nhật ký
+                </button>
+              )}
             </div>
             {events.length === 0 ? (
               <EmptyState
@@ -253,6 +271,15 @@ export default function Integrations() {
         danger={false}
         onCancel={() => setConfirmRegen(false)}
         onConfirm={handleRegenerate}
+      />
+      <ConfirmDialog
+        open={confirmClearLog}
+        title="Xóa nhật ký webhook"
+        message="Toàn bộ lịch sử các lượt gọi webhook sẽ bị xóa vĩnh viễn. Các lead đã được tạo từ trước KHÔNG bị ảnh hưởng — chỉ mất log đối chiếu."
+        confirmLabel="Xóa nhật ký"
+        danger={true}
+        onCancel={() => setConfirmClearLog(false)}
+        onConfirm={handleClearLog}
       />
     </div>
   );

@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { Mail, Lock, LogIn, Loader2, Eye, EyeOff, Zap, ShieldCheck, UserPlus, X } from "lucide-react";
+import { Mail, Lock, LogIn, Loader2, Eye, EyeOff, Zap, ShieldCheck, X } from "lucide-react";
 import Avatar from "../components/ui/Avatar.jsx";
 import PublicHeader from "../components/layout/PublicHeader.jsx";
 import { login, forgotPassword } from "../services/authService.js";
@@ -215,16 +214,9 @@ export default function Login({ onLogin }) {
               Thông tin của bạn được bảo mật.
             </p>
 
-            <div className="mt-4 border-t border-slate-100 pt-4">
-              <p className="text-center text-sm text-slate-500">Chưa có tài khoản nhân viên?</p>
-              <Link
-                to="/register"
-                className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-brand-200 bg-white py-2.5 text-sm font-semibold text-brand-700 transition-colors duration-200 hover:bg-brand-50"
-              >
-                <UserPlus size={16} />
-                Đăng ký tài khoản
-              </Link>
-            </div>
+            <p className="mt-4 border-t border-slate-100 pt-4 text-center text-xs text-slate-400">
+              Chưa có tài khoản? Liên hệ Quản trị viên (Admin) để được cấp tài khoản.
+            </p>
           </div>
         </div>
       </div>
