@@ -5,9 +5,12 @@ import Pill from "../ui/Pill.jsx";
 import Avatar from "../ui/Avatar.jsx";
 import ContactButtons from "../ui/ContactButtons.jsx";
 import { useToast } from "../ui/ToastProvider.jsx";
+import { useAuth } from "../../context/AuthContext.jsx";
 import { statusStyle, classStyle, careHistory, leadStatusOrder } from "../../data/mockData.js";
 import { priorityTier, getScoreBreakdown } from "../../utils/leadScoring.js";
 import { addLeadActivity } from "../../services/leadService.js";
+import useEscapeKey from "../../hooks/useEscapeKey.js";
+import { formatVietnamDateTime, vietnamDateTimeToIso } from "../../utils/datetime.js";
 
 // Cùng bộ 3 cấp độ ưu tiên với "Lead cần xử lý ngay" ở Dashboard, để icon
 // lửa/giọt nước nhất quán xuyên suốt ứng dụng.
@@ -46,6 +49,7 @@ const priorityStyles = {
 export default function LeadDetailModal({ lead, onClose, onRefresh }) {
   const navigate = useNavigate();
   const toast = useToast();
+  const user = useAuth();
   const [statusOpen, setStatusOpen] = useState(false);
   const [, forceRefresh] = useState(0);
   const [followUpOpen, setFollowUpOpen] = useState(false);
@@ -63,12 +67,10 @@ export default function LeadDetailModal({ lead, onClose, onRefresh }) {
     };
   }, [lead]);
 
-  useEffect(() => {
-    if (!lead) return;
-    const onKey = (e) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [lead, onClose]);
+  useEscapeKey(followUpOpen, () => setFollowUpOpen(false));
+  // ESC chỉ đóng popup CHI TIẾT khi không có popup con "Đặt lịch follow-up"
+  // đang mở đè lên trên — tránh đóng nhầm cả 2 lớp popup cùng lúc.
+  useEscapeKey(!!lead && !followUpOpen, onClose);
 
   if (!lead) return null;
 
@@ -80,8 +82,8 @@ export default function LeadDetailModal({ lead, onClose, onRefresh }) {
       ...(careHistory[lead.id] || []),
       {
         text: `Chuyển trạng thái sang ${newStatus}`,
-        channel: "Tư vấn viên A",
-        date: new Date().toLocaleString("vi-VN"),
+        channel: user?.name || "Hệ thống",
+        date: formatVietnamDateTime(new Date()),
       },
     ];
     toast.success("Cập nhật trạng thái thành công.");
@@ -95,8 +97,9 @@ export default function LeadDetailModal({ lead, onClose, onRefresh }) {
     if (!followUpForm.datetime) return;
     setSavingFollowUp(true);
     try {
-      const nextActionAt = new Date(followUpForm.datetime).toISOString();
-      const formatted = new Date(followUpForm.datetime).toLocaleString("vi-VN");
+      const [date, time] = followUpForm.datetime.split("T");
+      const nextActionAt = vietnamDateTimeToIso(date, time);
+      const formatted = formatVietnamDateTime(nextActionAt);
       await addLeadActivity(lead.id, {
         text: `Đặt lịch follow-up lúc ${formatted}${followUpForm.note.trim() ? ` — Ghi chú: ${followUpForm.note.trim()}` : ""}`,
         channel: lead.assignee || "Hệ thống",
@@ -213,7 +216,7 @@ export default function LeadDetailModal({ lead, onClose, onRefresh }) {
                 }`}
               >
                 <Clock size={12} />
-                {new Date(lead.nextFollowUpAt).toLocaleString("vi-VN")}
+                {formatVietnamDateTime(lead.nextFollowUpAt)}
                 {new Date(lead.nextFollowUpAt) <= new Date() ? " (quá hạn)" : ""}
               </div>
             ) : (

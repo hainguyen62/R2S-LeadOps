@@ -45,6 +45,12 @@ const MATRIX = {
     accessReportsPage: true,
     accessDashboardPage: true,
     accessHistoryPage: true,
+    // Cấu hình webhook (secret token) mang tính bảo mật/kỹ thuật — chỉ Admin
+    // được truy cập, tương tự tinh thần "Cấu hình bí mật bằng Environment
+    // Variables" (Mục XVII), không phải việc của Leader/Marketing/Sales.
+    accessIntegrationsPage: true,
+    manageVouchers: true, // Admin toàn quyền CRUD voucher
+    accessVouchersPage: true,
   },
   [ROLES.LEADER]: {
     viewAllLeads: true, // "Xem toàn bộ lead."
@@ -63,6 +69,8 @@ const MATRIX = {
     accessReportsPage: true,
     accessDashboardPage: true,
     accessHistoryPage: true,
+    manageVouchers: true, // "Điều chỉnh một số quy tắc chấm điểm" mở rộng — Leader tạo/sửa voucher, xem hiệu quả
+    accessVouchersPage: true,
   },
   [ROLES.MARKETING]: {
     viewAllLeads: true, // "Xem lead theo chiến dịch" — FE chưa tách lọc riêng, cho xem danh sách chung
@@ -142,6 +150,9 @@ export const PAGE_ACCESS = {
   "/history": "accessHistoryPage",
   "/reports": "accessReportsPage",
   "/settings": "accessSettings",
+  "/integrations": "accessIntegrationsPage",
+  "/vouchers": "accessVouchersPage",
+  "/courses": "manageCourses", // Mục III — chỉ Administrator: "Quản lý khóa học."
   "/profile": true,
 };
 

@@ -13,6 +13,7 @@ import {
   leadStatusOrder,
 } from "../data/mockData.js";
 import { priorityTier, classify, parseVnDate, largestScoreSwing } from "../utils/leadScoring.js";
+import { getVietnamDateKey, vietnamDateToDate } from "../utils/datetime.js";
 
 function clone(obj) {
   return typeof structuredClone === "function" ? structuredClone(obj) : JSON.parse(JSON.stringify(obj));
@@ -138,19 +139,21 @@ function hashKey(key) {
 }
 
 function dateKey(d) {
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  return getVietnamDateKey(d);
 }
 
 function formatDayLabel(d) {
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const [, month, day] = dateKey(d).split("-");
+  return `${day}/${month}`;
 }
 
 // Số lead mới/ngày dao động quanh mốc ~8 (biên độ ±5), ổn định theo ngày.
 function buildDailySeries(days, endDate = new Date()) {
   const out = [];
+  const vietnamEndDate = vietnamDateToDate(getVietnamDateKey(endDate));
   for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(endDate);
-    d.setDate(d.getDate() - i);
+    const d = new Date(vietnamEndDate);
+    d.setUTCDate(d.getUTCDate() - i);
     const wave = Math.sin(hashKey(dateKey(d)));
     const value = Math.max(1, Math.round(8 + wave * 5));
     out.push({ day: formatDayLabel(d), value });

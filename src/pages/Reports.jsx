@@ -11,7 +11,7 @@ import {
   Line,
   Legend,
 } from "recharts";
-import { Download, AlertCircle, CalendarRange, X, GitBranch } from "lucide-react";
+import { Download, AlertCircle, CalendarRange, X, GitBranch, Ticket } from "lucide-react";
 import ChartCard from "../components/ui/ChartCard.jsx";
 import FunnelBody from "../components/dashboard/FunnelBody.jsx";
 import LeadListModal from "../components/dashboard/LeadListModal.jsx";
@@ -23,6 +23,8 @@ import {
   DASHBOARD_RANGE_OPTIONS,
 } from "../services/dashboardService.js";
 import { fetchCampaigns } from "../services/campaignService.js";
+import { fetchVoucherStats } from "../services/voucherService.js";
+import useEscapeKey from "../hooks/useEscapeKey.js";
 import { exportToCsv } from "../utils/exportCsv.js";
 import { useNavigate } from "react-router-dom";
 import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
@@ -73,9 +75,14 @@ export default function Reports() {
   const [campaignSortDir, setCampaignSortDir] = useState("desc");
   // Chiến dịch đang được xem nhanh (drill-down) sau khi click vào biểu đồ — Mục 8.3.
   const [drillCampaign, setDrillCampaign] = useState(null);
+  useEscapeKey(!!drillCampaign, () => setDrillCampaign(null));
   // Drill-down chung: click nguồn / trạng thái / phễu / KPI chiến dịch -> mở
   // danh sách lead tương ứng (LeadListModal) — "Drill-down từ báo cáo → Lead list".
   const [leadDrill, setLeadDrill] = useState(null); // { title, filters }
+
+  // ---- Báo cáo hiệu quả Voucher ----
+  const [voucherStats, setVoucherStats] = useState([]);
+  const [voucherStatsLoading, setVoucherStatsLoading] = useState(true);
 
   // Dropdown khoảng thời gian dùng chung (giống Dashboard.jsx) — áp dụng cho
   // "Lead theo ngày", "Nguồn lead", "Phân loại lead", "Phễu chuyển đổi".
@@ -120,6 +127,23 @@ export default function Reports() {
       })
       .finally(() => {
         if (!cancelled) setCampaignReportLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Tải thống kê hiệu quả voucher (số lượt dùng, tổng tiền giảm) — chỉ những
+  // voucher đã được dùng ít nhất 1 lần mới hiển thị (xem voucherService.js).
+  useEffect(() => {
+    let cancelled = false;
+    setVoucherStatsLoading(true);
+    fetchVoucherStats()
+      .then((stats) => {
+        if (!cancelled) setVoucherStats(stats);
+      })
+      .finally(() => {
+        if (!cancelled) setVoucherStatsLoading(false);
       });
     return () => {
       cancelled = true;
@@ -401,6 +425,38 @@ export default function Reports() {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+      </ChartCard>
+
+      {/* ---- Hiệu quả Voucher ---- */}
+      <ChartCard title="Hiệu quả voucher">
+        {voucherStatsLoading ? (
+          <SkeletonBlock className="h-[160px]" />
+        ) : voucherStats.length === 0 ? (
+          <EmptyState icon={Ticket} title="Chưa có voucher nào được sử dụng" description="Số liệu sẽ hiện khi Sales áp voucher cho lead trong luồng đặt cọc/đăng ký." compact />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                  <th className="py-2 pr-4 font-medium">Mã voucher</th>
+                  <th className="py-2 pr-4 font-medium">Chương trình</th>
+                  <th className="py-2 pr-4 font-medium">Số lượt dùng</th>
+                  <th className="py-2 pr-4 font-medium">Tổng tiền đã giảm</th>
+                </tr>
+              </thead>
+              <tbody>
+                {voucherStats.map((s) => (
+                  <tr key={s.id} className="border-b border-slate-50 last:border-0">
+                    <td className="py-2 pr-4 font-mono font-medium text-slate-800 whitespace-nowrap">{s.code}</td>
+                    <td className="py-2 pr-4 text-slate-600">{s.name}</td>
+                    <td className="py-2 pr-4 text-slate-600">{s.redemptions}</td>
+                    <td className="py-2 pr-4 text-slate-600 whitespace-nowrap">{formatVnd(s.totalDiscount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </ChartCard>

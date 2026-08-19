@@ -5,6 +5,7 @@ import EmptyState from "../ui/EmptyState.jsx";
 import Pill from "../ui/Pill.jsx";
 import { statusStyle } from "../../data/mockData.js";
 import { fetchLeads } from "../../services/leadService.js";
+import useEscapeKey from "../../hooks/useEscapeKey.js";
 
 /**
  * Modal drill-down dùng chung: click 1 KPI / cột nguồn / cột trạng thái ở
@@ -42,6 +43,8 @@ export default function LeadListModal({ title, filters, onClose }) {
       cancelled = true;
     };
   }, [filters]);
+
+  useEscapeKey(!!filters, onClose);
 
   if (!filters) return null;
 

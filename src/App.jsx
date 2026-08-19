@@ -19,6 +19,9 @@ import Settings from "./pages/Settings.jsx";
 import Profile from "./pages/Profile.jsx";
 import MyAppointments from "./pages/MyAppointments.jsx";
 import Consultation from "./pages/Consultation.jsx";
+import Integrations from "./pages/Integrations.jsx";
+import Vouchers from "./pages/Vouchers.jsx";
+import Courses from "./pages/Courses.jsx";
 
 /**
  * Chặn truy cập theo route nếu vai trò hiện tại không có quyền (Mục IV).
@@ -74,6 +77,9 @@ export default function App() {
           <Route path="/history" element={<RequireAccess><History /></RequireAccess>} />
           <Route path="/reports" element={<RequireAccess><Reports /></RequireAccess>} />
           <Route path="/settings" element={<RequireAccess><Settings /></RequireAccess>} />
+          <Route path="/integrations" element={<RequireAccess><Integrations /></RequireAccess>} />
+          <Route path="/vouchers" element={<RequireAccess><Vouchers /></RequireAccess>} />
+          <Route path="/courses" element={<RequireAccess><Courses /></RequireAccess>} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/appointments" element={<MyAppointments />} />
           <Route path="*" element={<Navigate to={getHomePath(user)} replace />} />

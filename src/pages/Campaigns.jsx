@@ -8,6 +8,8 @@ import EmptyState from "../components/ui/EmptyState.jsx";
 import { useToast } from "../components/ui/ToastProvider.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { can } from "../utils/permissions.js";
+import useEscapeKey from "../hooks/useEscapeKey.js";
+import { getVietnamDateKey, vietnamDateToDate } from "../utils/datetime.js";
 
 // "2026-05-01" -> "01/05"
 const formatShortDate = (iso) => {
@@ -26,10 +28,9 @@ const formatShortDate = (iso) => {
  * Nếu thiếu ngày bắt đầu/kết thúc hợp lệ thì fallback về c.status gốc.
  */
 const getCampaignDisplayStatus = (c) => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const start = c.start && c.start !== "—" ? new Date(c.start) : null;
-  const end = c.end && c.end !== "—" ? new Date(c.end) : null;
+  const today = vietnamDateToDate(getVietnamDateKey());
+  const start = c.start && c.start !== "—" ? vietnamDateToDate(c.start) : null;
+  const end = c.end && c.end !== "—" ? vietnamDateToDate(c.end) : null;
 
   if (start && !isNaN(start) && today < start) return "Sắp diễn ra";
   if (end && !isNaN(end) && today > end) return "Kết thúc";
@@ -54,6 +55,7 @@ export default function Campaigns() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
+  useEscapeKey(showAdd, () => setShowAdd(false));
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ name: "", source: "", budget: "", start: "", end: "" });
   const [deleteTarget, setDeleteTarget] = useState(null);

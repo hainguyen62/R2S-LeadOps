@@ -4,18 +4,65 @@
    ============================================================ */
 
 import { scoreLead, classify } from "../utils/leadScoring.js";
+import { getVietnamDateKey } from "../utils/datetime.js";
 
-// Danh sách khóa học dùng chung cho toàn app (form Lead, form Campaign...).
-// 4 khóa đầu khớp dữ liệu ban đầu ở Mục IX (courses); 2 khóa sau đã được
-// dùng sẵn trong UI trước đó nên giữ lại để không phá dữ liệu demo cũ.
-export const courseOptions = [
-  "Java Backend",
-  "ReactJS",
-  "Flutter",
-  "Business Analyst",
-  "Data Analyst",
-  "UI/UX Design",
+// Danh sách khóa học kèm học phí (basePrice) và các dòng phí phụ thu (fees) —
+// xem services/courseService.js. Đây là seed ban đầu cho trang "Quản lý khóa
+// học" (Mục III — Administrator: "Quản lý khóa học"); dữ liệu thật sẽ do Admin
+// tự cấu hình và lưu ở localStorage, seed này chỉ dùng khi chưa có gì lưu.
+export const courses = [
+  {
+    id: 1,
+    name: "Java Backend",
+    basePrice: 15000000,
+    fees: [{ id: 1, name: "Phí tài liệu", amount: 300000 }],
+    status: "ACTIVE",
+  },
+  {
+    id: 2,
+    name: "ReactJS",
+    basePrice: 13000000,
+    fees: [{ id: 1, name: "Phí tài liệu", amount: 300000 }],
+    status: "ACTIVE",
+  },
+  {
+    id: 3,
+    name: "Flutter",
+    basePrice: 13500000,
+    fees: [{ id: 1, name: "Phí tài liệu", amount: 300000 }],
+    status: "ACTIVE",
+  },
+  {
+    id: 4,
+    name: "Business Analyst",
+    basePrice: 16000000,
+    fees: [
+      { id: 1, name: "Phí tài liệu", amount: 350000 },
+      { id: 2, name: "Phí thi chứng chỉ", amount: 500000 },
+    ],
+    status: "ACTIVE",
+  },
+  {
+    id: 5,
+    name: "Data Analyst",
+    basePrice: 14500000,
+    fees: [{ id: 1, name: "Phí tài liệu", amount: 300000 }],
+    status: "ACTIVE",
+  },
+  {
+    id: 6,
+    name: "UI/UX Design",
+    basePrice: 12000000,
+    fees: [{ id: 1, name: "Phí tài liệu", amount: 300000 }],
+    status: "ACTIVE",
+  },
 ];
+
+// Danh sách tên khóa học dùng chung cho toàn app (form Lead, form Campaign,
+// bộ lọc...) — suy ra từ `courses` để luôn khớp với dữ liệu học phí, tránh
+// lệch tên giữa 2 nơi (đã có trường hợp lead dùng "BA" trong khi danh sách
+// dùng "Business Analyst" — đã chuẩn hóa lại).
+export const courseOptions = courses.map((c) => c.name);
 
 
 // Sinh mốc thời gian follow-up TƯƠNG ĐỐI so với "hôm nay" thật (new Date()),
@@ -23,9 +70,8 @@ export const courseOptions = [
 // khối mock data (đã gặp ở phần biểu đồ Dashboard). offsetDays âm = quá khứ
 // (quá hạn), 0 = hôm nay, dương = tương lai (chưa đến hạn).
 function daysFromNow(offsetDays) {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  d.setHours(9, 0, 0, 0);
+  const d = new Date(`${getVietnamDateKey()}T09:00:00+07:00`);
+  d.setUTCDate(d.getUTCDate() + offsetDays);
   return d.toISOString();
 }
 
@@ -164,7 +210,7 @@ export const leads = [
     },
   },
   {
-    id: 4, name: "Phạm Gia Bảo", course: "BA", source: "Google Form", status: "Đang tư vấn",
+    id: 4, name: "Phạm Gia Bảo", course: "Business Analyst", source: "Google Form", status: "Đang tư vấn",
     date: "12/05/2026 08:30", phone: "0904 567 890", email: "giabao@gmail.com", assignee: null, // chưa phân công
     nextFollowUpAt: null,
     signals: {
@@ -407,6 +453,45 @@ export const campaignTrends = {
   ],
 };
 
+// Chương trình giảm giá — xem services/voucherService.js. minLeadStage dùng
+// đúng chuỗi trong leadStatusOrder để so sánh thứ tự giai đoạn lead.
+export const vouchers = [
+  {
+    id: 1,
+    code: "JAVA30",
+    name: "Ưu đãi khai giảng Java Backend",
+    description: "Giảm 30% học phí cho lead đăng ký từ chiến dịch Tuyển sinh khóa Java Backend.",
+    discountType: "PERCENT",
+    discountValue: 30,
+    courseId: "Java Backend",
+    campaignId: 1,
+    startDate: "2026-05-01",
+    endDate: "2026-06-30",
+    usageLimit: 20,
+    usageLimitPerLead: 1,
+    minLeadStage: "Đang cân nhắc",
+    status: "ACTIVE",
+    createdAt: "2026-05-01T09:00:00.000Z",
+  },
+  {
+    id: 2,
+    code: "SUMMER500K",
+    name: "Giảm 500k mùa hè",
+    description: "Áp dụng cho mọi khóa học, ưu tiên lead đặt cọc sớm.",
+    discountType: "FIXED_AMOUNT",
+    discountValue: 500000,
+    courseId: null,
+    campaignId: null,
+    startDate: "2026-05-01",
+    endDate: "2026-08-31",
+    usageLimit: null,
+    usageLimitPerLead: 1,
+    minLeadStage: "Đang cân nhắc",
+    status: "ACTIVE",
+    createdAt: "2026-05-01T09:00:00.000Z",
+  },
+];
+
 export const activityLogs = [
   { id: 1, user: "Tư vấn viên A", action: "Cập nhật trạng thái lead #1", time: "12/05/2026 10:30" },
   { id: 2, user: "Tư vấn viên B", action: "Thêm lead mới #9", time: "12/05/2026 09:45" },
@@ -486,9 +571,14 @@ export const notifications = [
 export const navItems = [
   { label: "Dashboard", path: "/", icon: "LayoutDashboard" },
   { label: "Leads", path: "/leads", icon: "Users" },
-  { label: "Chiến dịch", path: "/campaigns", icon: "GitBranch" },
+  // TẠM ẨN — bỏ comment dòng dưới để hiện lại menu "Chiến dịch" (route/trang
+  // /campaigns vẫn còn nguyên, chỉ đang ẩn khỏi thanh điều hướng).
+  // { label: "Chiến dịch", path: "/campaigns", icon: "GitBranch" },
+  { label: "Chương trình giảm giá", path: "/vouchers", icon: "Ticket" },
+  { label: "Quản lý khóa học", path: "/courses", icon: "GraduationCap" },
   { label: "Lịch hẹn của tôi", path: "/appointments", icon: "CalendarClock" },
   { label: "Lịch sử chăm sóc", path: "/history", icon: "History" },
   { label: "Báo cáo", path: "/reports", icon: "BarChart3" },
+  { label: "Nguồn tích hợp", path: "/integrations", icon: "Webhook" },
   { label: "Cài đặt", path: "/settings", icon: "Settings" },
 ];

@@ -29,6 +29,7 @@ import EmptyState from "../components/ui/EmptyState.jsx";
 import Pill from "../components/ui/Pill.jsx";
 import { statusStyle } from "../data/mockData.js";
 import LeadListModal from "../components/dashboard/LeadListModal.jsx";
+import useEscapeKey from "../hooks/useEscapeKey.js";
 
 const tooltipStyle = {
   background: "#ffffff",
@@ -98,6 +99,7 @@ export default function CampaignDetails() {
   // ---- Drill-down từ biểu đồ xu hướng: click 1 ngày -> xem lead phát sinh ngày đó ----
   const [campaignLeads, setCampaignLeads] = useState([]);
   const [drillDay, setDrillDay] = useState(null); // "dd/mm" đang được xem chi tiết, null = đóng modal
+  useEscapeKey(!!drillDay, () => setDrillDay(null));
   // KPI đang được xem chi tiết dạng danh sách lead (click vào 1 trong 4 thẻ
   // Số lead / Lead nóng / Đã đặt cọc / Đã đăng ký) — giống hành vi Dashboard.
   const [kpiDrill, setKpiDrill] = useState(null); // { title, filters }

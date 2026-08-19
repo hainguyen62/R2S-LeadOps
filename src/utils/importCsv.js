@@ -1,4 +1,5 @@
 // Nhập dữ liệu từ file CSV (hỗ trợ cả header tiếng Anh & tiếng Việt)
+import { formatVietnamDate } from "./datetime.js";
 // Hàm parse CSV đơn giản, xử lý dấu ngoặc kép và dấu phẩy bên trong
 export function parseCsv(text) {
   const rows = [];
@@ -115,7 +116,7 @@ function rowToLead(headers, values) {
   lead.course = lead.course || "Chưa rõ";
   lead.source = lead.source || "Manual";
   lead.status = lead.status || "Lead mới";
-  lead.date = lead.date || new Date().toLocaleDateString("vi-VN");
+  lead.date = lead.date || formatVietnamDate(new Date());
   lead.phone = lead.phone || "—";
   lead.email = lead.email || "—";
   lead.assignee = lead.assignee || "Tư vấn viên A";

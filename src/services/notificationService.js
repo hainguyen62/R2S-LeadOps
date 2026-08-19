@@ -9,6 +9,7 @@
    ============================================================ */
 
 import { apiFetch, USE_MOCK, mockDelay, toBackendPaging } from "./apiClient.js";
+import { formatVietnamDateTime } from "../utils/datetime.js";
 
 const TYPE_TO_UI = {
   LEAD_HOT: "hot-lead",
@@ -24,7 +25,7 @@ const TYPE_TO_UI = {
 
 function toVnDateTime(iso) {
   if (!iso) return "";
-  return new Date(iso).toLocaleString("vi-VN");
+  return formatVietnamDateTime(iso);
 }
 
 /** NotificationData (backend) -> đúng field UI đang dùng ở NotificationBell.jsx. */

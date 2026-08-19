@@ -11,6 +11,8 @@ import {
   updateAppointment,
   APPOINTMENT_CHANNEL_ENUM,
 } from "../services/appointmentService.js";
+import useEscapeKey from "../hooks/useEscapeKey.js";
+import { formatVietnamDateTime, getVietnamDateTimeInput, vietnamDateTimeToIso } from "../utils/datetime.js";
 
 const CHANNEL_LABEL = { PHONE: "Điện thoại", MESSENGER: "Messenger", ZALO: "Zalo", EMAIL: "Email", GOOGLE_MEET: "Google Meet", OFFLINE: "Gặp trực tiếp", OTHER: "Khác" };
 
@@ -22,6 +24,7 @@ export default function MyAppointments() {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState([]);
   const [editing, setEditing] = useState(null);
+  useEscapeKey(!!editing, () => setEditing(null));
   const [form, setForm] = useState({ title: "", date: "", time: "", durationMinutes: 30, channel: "PHONE", note: "" });
   const [saving, setSaving] = useState(false);
 
@@ -38,12 +41,11 @@ export default function MyAppointments() {
   }, []);
 
   const openEdit = (a) => {
-    const d = new Date(a.appointmentAt);
-    const pad = (n) => String(n).padStart(2, "0");
+    const { date, time } = getVietnamDateTimeInput(a.appointmentAt);
     setForm({
       title: a.title,
-      date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
-      time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+      date,
+      time,
       durationMinutes: a.durationMinutes,
       channel: a.channel,
       note: a.note || "",
@@ -55,7 +57,7 @@ export default function MyAppointments() {
     e.preventDefault();
     setSaving(true);
     try {
-      const appointmentAt = new Date(`${form.date}T${form.time}:00`).toISOString();
+      const appointmentAt = vietnamDateTimeToIso(form.date, form.time);
       await updateAppointment(editing.id, {
         title: form.title.trim(),
         appointmentAt,
@@ -98,7 +100,7 @@ export default function MyAppointments() {
                 <p className="text-sm font-medium text-slate-800 truncate">{a.title}</p>
                 <p className="text-xs text-slate-500 mt-0.5">
                   {a.leadName ? `${a.leadName} · ` : ""}
-                  {new Date(a.appointmentAt).toLocaleString("vi-VN")} · {a.durationMinutes} phút · {a.channelLabel}
+                  {formatVietnamDateTime(a.appointmentAt)} · {a.durationMinutes} phút · {a.channelLabel}
                 </p>
                 <div className="mt-2">
                   <Pill

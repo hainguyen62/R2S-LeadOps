@@ -42,6 +42,8 @@ import { exportToCsv } from "../utils/exportCsv.js";
 import { importLeadsFromCsv } from "../utils/importCsv.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { isSales } from "../utils/permissions.js";
+import { formatVietnamDateTime } from "../utils/datetime.js";
+import useEscapeKey from "../hooks/useEscapeKey.js";
 
 const pageSize = 6;
 
@@ -88,6 +90,8 @@ export default function Leads() {
   const [sortDir, setSortDir] = useState(null); // 'desc' | 'asc' | null
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  useEscapeKey(showAdd, () => setShowAdd(false));
+  useEscapeKey(showImport, () => setShowImport(false));
   const [importMsg, setImportMsg] = useState("");
   const [importing, setImporting] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState(null);
@@ -669,7 +673,7 @@ export default function Leads() {
                   <td className="py-2.5 px-4 whitespace-nowrap text-xs">
                     {l.nextFollowUpAt ? (
                       <span className={new Date(l.nextFollowUpAt) <= new Date() ? "text-red-600 font-medium" : "text-slate-400"}>
-                        {new Date(l.nextFollowUpAt).toLocaleString("vi-VN")}
+                        {formatVietnamDateTime(l.nextFollowUpAt)}
                         {new Date(l.nextFollowUpAt) <= new Date() ? " (quá hạn)" : ""}
                       </span>
                     ) : (

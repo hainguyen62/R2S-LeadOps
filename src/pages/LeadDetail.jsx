@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Flame, Droplet, UserCheck, ChevronDown, Check, AlertCircle, Users, X, Loader2, CalendarClock, PlusCircle, Clock, History as HistoryIcon } from "lucide-react";
+import { ArrowLeft, Flame, Droplet, UserCheck, ChevronDown, Check, AlertCircle, Users, X, Loader2, CalendarClock, PlusCircle, Clock, History as HistoryIcon, Ticket, Percent, Banknote } from "lucide-react";
 import Pill from "../components/ui/Pill.jsx";
 import Avatar from "../components/ui/Avatar.jsx";
 import ContactButtons from "../components/ui/ContactButtons.jsx";
@@ -19,9 +19,12 @@ import {
   APPOINTMENT_CHANNEL_ENUM,
   APPOINTMENT_RESULT_ENUM,
 } from "../services/appointmentService.js";
+import { fetchApplicableVouchers, fetchLeadVoucherRedemptions, redeemVoucher, computeDiscount } from "../services/voucherService.js";
+import { fetchCourseByName, totalWithFees } from "../services/courseService.js";
 import { priorityTier, getScoreBreakdown, scoreLead, scoringGroups, deductionGroup } from "../utils/leadScoring.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { isSales, isAdmin, can } from "../utils/permissions.js";
+import { formatVietnamDateTime, vietnamDateTimeToIso } from "../utils/datetime.js";
 
 // Loại hoạt động chăm sóc (Module 4 - Mục VI kế hoạch)
 const activityTypes = [
@@ -132,6 +135,15 @@ export default function LeadDetail() {
   const [apptActionForm, setApptActionForm] = useState({ reason: "", result: "SUCCESS", note: "" });
   const [apptActionSaving, setApptActionSaving] = useState(false);
 
+  // ---- Học phí + mã giảm giá (thay cho khối "Voucher giảm giá" cũ) ----
+  const [coursePricing, setCoursePricing] = useState(null); // { basePrice, fees, ... } | null nếu chưa cấu hình ở "Quản lý khóa học"
+  const [applicableVouchers, setApplicableVouchers] = useState([]);
+  const [discountCode, setDiscountCode] = useState(""); // mã đang gõ/chọn — chưa chắc đã áp dụng
+  const [codeMenuOpen, setCodeMenuOpen] = useState(false);
+  const [manualOrderValue, setManualOrderValue] = useState(""); // chỉ dùng khi khóa học CHƯA có học phí cấu hình
+  const [redeemingVoucher, setRedeemingVoucher] = useState(false);
+  const [redemptions, setRedemptions] = useState([]);
+
   // GET /api/leads/{id} + GET /api/leads/{id}/activities — xem leadService.js
   useEffect(() => {
     let cancelled = false;
@@ -195,6 +207,54 @@ export default function LeadDetail() {
     refreshAppointments();
   }, [id]);
 
+  // Danh sách voucher còn có thể áp dụng cho lead này + lịch sử đã dùng —
+  // phải chờ `lead` tải xong (cần lead.course/lead.status để lọc điều kiện áp dụng).
+  const refreshVouchers = () => {
+    if (!lead) return;
+    fetchApplicableVouchers(lead).then(setApplicableVouchers).catch(() => setApplicableVouchers([]));
+    fetchLeadVoucherRedemptions(lead.id).then(setRedemptions).catch(() => setRedemptions([]));
+  };
+  useEffect(() => {
+    refreshVouchers();
+  }, [lead?.id, lead?.status, lead?.course]);
+
+  // Học phí của khóa học lead đang chọn — lấy từ "Quản lý khóa học" (courseService).
+  // Nếu Admin chưa cấu hình giá cho khóa này, coursePricing = null và UI sẽ cho
+  // nhập tay giá trị đơn hàng như luồng cũ (không chặn Sales áp voucher).
+  useEffect(() => {
+    if (!lead?.course) {
+      setCoursePricing(null);
+      return;
+    }
+    let cancelled = false;
+    fetchCourseByName(lead.course)
+      .then((c) => {
+        if (!cancelled) setCoursePricing(c);
+      })
+      .catch(() => {
+        if (!cancelled) setCoursePricing(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lead?.course]);
+
+  // Tổng học phí (học phí gốc + phí phụ thu) CHƯA áp mã — null nếu chưa có giá cấu hình.
+  const tuitionSubtotal = coursePricing ? totalWithFees(coursePricing) : null;
+  const orderValueForVoucher = tuitionSubtotal != null ? tuitionSubtotal : Number(manualOrderValue) || 0;
+
+  // Voucher khớp đúng mã đang gõ/chọn (so khớp không phân biệt hoa thường) — dùng để preview số tiền giảm.
+  const matchedVoucher = applicableVouchers.find(
+    (v) => v.code.toUpperCase() === discountCode.trim().toUpperCase()
+  );
+  const previewDiscount = matchedVoucher ? computeDiscount(matchedVoucher, orderValueForVoucher) : 0;
+  // Sau khi áp dụng, số tiền giảm phải lấy từ lượt đổi mã đã lưu thay vì mã
+  // đang nhập (mã này sẽ được xóa để ẩn khung nhập voucher).
+  const appliedDiscount = redemptions.reduce((sum, redemption) => sum + (Number(redemption.discountAmount) || 0), 0);
+  const hasAppliedVoucher = redemptions.length > 0;
+  const discountAmount = hasAppliedVoucher ? Math.min(appliedDiscount, orderValueForVoucher) : previewDiscount;
+  const finalTotal = Math.max(orderValueForVoucher - discountAmount, 0);
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -245,7 +305,7 @@ export default function LeadDetail() {
     if (newStatus === lead.status) return;
     setUpdatingStatus(true);
     try {
-      const updated = await updateLeadStatus(lead.id, { newStatus });
+      const updated = await updateLeadStatus(lead.id, { newStatus, actorName: user?.name });
       setLead(updated);
       const freshHistory = await fetchLeadActivities(lead.id);
       setHistory(freshHistory);
@@ -276,7 +336,7 @@ export default function LeadDetail() {
     if (!apptForm.title.trim() || !apptForm.date || !apptForm.time) return;
     setApptSaving(true);
     try {
-      const appointmentAt = new Date(`${apptForm.date}T${apptForm.time}:00`).toISOString();
+      const appointmentAt = vietnamDateTimeToIso(apptForm.date, apptForm.time);
       await createAppointment(lead.id, {
         title: apptForm.title.trim(),
         appointmentAt,
@@ -291,6 +351,31 @@ export default function LeadDetail() {
       toast.error(err.message || "Đặt lịch hẹn thất bại.");
     } finally {
       setApptSaving(false);
+    }
+  };
+
+  const handleRedeemVoucher = async () => {
+    if (!discountCode.trim()) return;
+    setRedeemingVoucher(true);
+    try {
+      const redemption = await redeemVoucher(lead, {
+        voucherCode: discountCode.trim(),
+        orderValue: orderValueForVoucher,
+        actorName: user?.name,
+      });
+      const freshHistory = await fetchLeadActivities(lead.id);
+      setHistory(freshHistory);
+      // Cập nhật ngay để UI chuyển sang chi tiết thanh toán, không chờ lần
+      // tải lại danh sách voucher ở nền.
+      setRedemptions((current) => [redemption, ...current]);
+      refreshVouchers();
+      toast.success(`Đã áp dụng mã "${discountCode.trim().toUpperCase()}".`);
+      setDiscountCode("");
+      setManualOrderValue("");
+    } catch (err) {
+      toast.error(err.message || "Áp dụng mã giảm giá thất bại.");
+    } finally {
+      setRedeemingVoucher(false);
     }
   };
 
@@ -391,8 +476,9 @@ export default function LeadDetail() {
     if (!followUpForm.datetime) return;
     setSavingFollowUp(true);
     try {
-      const nextActionAt = new Date(followUpForm.datetime).toISOString();
-      const formatted = new Date(followUpForm.datetime).toLocaleString("vi-VN");
+      const [date, time] = followUpForm.datetime.split("T");
+      const nextActionAt = vietnamDateTimeToIso(date, time);
+      const formatted = formatVietnamDateTime(nextActionAt);
       // Backend không có field nextFollowUpAt trong UpdateLeadRequest (PUT /leads/{id}),
       // nên KHÔNG dùng updateLead ở đây — nó sẽ bị lược bỏ âm thầm. Theo đúng spec,
       // thời gian follow-up phải gửi qua nextActionAt của CreateActivityRequest
@@ -441,7 +527,7 @@ export default function LeadDetail() {
     try {
       const updated = await updateLead(lead.id, {
         signals: draftSignals,
-        scoreUpdatedAt: new Date().toLocaleString("vi-VN"),
+        scoreUpdatedAt: formatVietnamDateTime(new Date()),
       });
       await addLeadActivity(lead.id, {
         text: `Cập nhật bảng điểm thủ công — điểm mới: ${updated.score}`,
@@ -537,7 +623,7 @@ export default function LeadDetail() {
                   <div className="flex justify-between gap-3">
                     <span className="text-slate-500">Lịch follow-up</span>
                     <span className={new Date(lead.nextFollowUpAt) <= new Date() ? "text-red-600 font-medium" : "text-slate-800"}>
-                      {new Date(lead.nextFollowUpAt).toLocaleString("vi-VN")}
+                      {formatVietnamDateTime(lead.nextFollowUpAt)}
                       {new Date(lead.nextFollowUpAt) <= new Date() ? " (quá hạn)" : ""}
                     </span>
                   </div>
@@ -613,7 +699,7 @@ export default function LeadDetail() {
                     <div key={i} className="flex items-start justify-between gap-3 text-xs">
                       <div className="min-w-0">
                         <p className="text-slate-600 truncate">{ev.label}</p>
-                        <p className="text-[10px] text-slate-400">{ev.date.toLocaleString("vi-VN")}</p>
+                        <p className="text-[10px] text-slate-400">{formatVietnamDateTime(ev.date)}</p>
                       </div>
                       <div className="text-right shrink-0">
                         <span className={ev.value.trim().startsWith("-") ? "text-red-600 font-medium" : "text-emerald-600 font-medium"}>
@@ -701,7 +787,7 @@ export default function LeadDetail() {
                   <div key={a.id} className="border border-slate-100 rounded-lg p-3">
                     <p className="text-sm font-medium text-slate-800">{a.title}</p>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      {new Date(a.appointmentAt).toLocaleString("vi-VN")} · {a.durationMinutes} phút · {a.channelLabel}
+                      {formatVietnamDateTime(a.appointmentAt)} · {a.durationMinutes} phút · {a.channelLabel}
                     </p>
                     <div className="flex items-center justify-between mt-2">
                       <Pill
@@ -720,6 +806,149 @@ export default function LeadDetail() {
                         </div>
                       )}
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ---- Học phí & mã giảm giá (thay cho khối "Voucher giảm giá" cũ) ---- */}
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-card">
+            <p className="text-sm font-semibold text-slate-900 mb-4">Học phí</p>
+
+            {/* Học phí — tự động lấy theo khóa học lead đang chọn, cấu hình ở "Quản lý khóa học" */}
+            {coursePricing ? (
+              <div className="space-y-1.5 mb-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-500">Học phí — {lead.course}</span>
+                  <span className="font-medium text-slate-800">{coursePricing.basePrice.toLocaleString("vi-VN")}đ</span>
+                </div>
+                {coursePricing.fees?.map((f) => (
+                  <div key={f.id} className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">+ {f.name}</span>
+                    <span className="text-slate-500">{f.amount.toLocaleString("vi-VN")}đ</span>
+                  </div>
+                ))}
+              </div>
+            ) : (can(user, "editLeadCare") || isAdmin(user)) ? (
+              <div className="mb-4">
+                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-3">
+                  Chưa cấu hình học phí cho khóa "{lead.course}". {isAdmin(user) ? "Vào \"Quản lý khóa học\" để cài đặt giá, hoặc nhập tay giá trị đơn hàng bên dưới." : "Nhập tay giá trị đơn hàng bên dưới hoặc liên hệ Admin để cài đặt học phí."}
+                </p>
+                <label className="text-xs text-slate-500 block mb-1">Giá trị đơn hàng (VNĐ)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={manualOrderValue}
+                  onChange={(e) => setManualOrderValue(e.target.value)}
+                  placeholder="VD: 15000000"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+                />
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 mb-4">Chưa cấu hình học phí cho khóa "{lead.course}".</p>
+            )}
+
+            {/* Chỉ cho nhập mã khi lead chưa có voucher được áp dụng. Sau đó,
+                khối này được thay bằng chi tiết thanh toán bên dưới. */}
+            {(can(user, "editLeadCare") || isAdmin(user)) && !hasAppliedVoucher && (
+              <div className="mb-4">
+                <label className="text-xs text-slate-500 block mb-1">Mã giảm giá</label>
+                <div className="relative">
+                  <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus-within:ring-1 focus-within:ring-brand-500">
+                    <Ticket size={14} className="text-slate-400 shrink-0" />
+                    <input
+                      value={discountCode}
+                      onChange={(e) => setDiscountCode(e.target.value.toUpperCase())}
+                      onFocus={() => setCodeMenuOpen(true)}
+                      onBlur={() => setTimeout(() => setCodeMenuOpen(false), 120)}
+                      placeholder={applicableVouchers.length > 0 ? "Nhập hoặc chọn mã..." : "Nhập mã giảm giá..."}
+                      className="flex-1 min-w-0 bg-transparent text-sm font-mono focus:outline-none"
+                    />
+                    {discountCode && (
+                      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => setDiscountCode("")} className="text-slate-300 hover:text-slate-500 shrink-0">
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  {codeMenuOpen && applicableVouchers.length > 0 && (
+                    <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-elevated z-10 overflow-hidden max-h-48 overflow-y-auto">
+                      {applicableVouchers
+                        .filter((v) => !discountCode.trim() || v.code.includes(discountCode.trim().toUpperCase()))
+                        .map((v) => (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              setDiscountCode(v.code);
+                              setCodeMenuOpen(false);
+                            }}
+                            className="w-full flex items-center justify-between gap-2 px-3 py-2 text-xs hover:bg-slate-50 text-left"
+                          >
+                            <span className="font-mono font-medium text-slate-800">{v.code}</span>
+                            <span className="flex items-center gap-1 text-violet-600 shrink-0">
+                              {v.discountType === "PERCENT" ? <Percent size={10} /> : <Banknote size={10} />}
+                              {v.discountType === "PERCENT" ? `${v.discountValue}%` : `${v.discountValue.toLocaleString("vi-VN")}đ`}
+                            </span>
+                          </button>
+                        ))}
+                      {applicableVouchers.filter((v) => !discountCode.trim() || v.code.includes(discountCode.trim().toUpperCase())).length === 0 && (
+                        <p className="px-3 py-2 text-xs text-slate-400">Không có mã nào khớp.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {discountCode.trim() && !matchedVoucher && (
+                  <p className="text-[11px] text-slate-400 mt-1">Mã này chưa thỏa điều kiện áp dụng cho lead — hệ thống sẽ kiểm tra lại khi bấm áp dụng.</p>
+                )}
+              </div>
+            )}
+
+            {/* Chi tiết thanh toán — gồm học phí, các phí phụ thu ở trên và khoản
+                giảm giá từ voucher đã áp dụng (hoặc phần xem trước khi đang nhập mã). */}
+            {orderValueForVoucher > 0 && (
+              <div className="border-t border-slate-100 pt-3 space-y-1.5">
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span>Tạm tính</span>
+                  <span>{orderValueForVoucher.toLocaleString("vi-VN")}đ</span>
+                </div>
+                {discountAmount > 0 && (
+                  <div className="flex items-center justify-between text-xs text-emerald-600">
+                    <span>Giảm giá ({hasAppliedVoucher ? redemptions.map((r) => r.voucherCode).join(", ") : discountCode.trim().toUpperCase()})</span>
+                    <span>− {discountAmount.toLocaleString("vi-VN")}đ</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-900">Tổng tiền cuối cùng</span>
+                  <span className="text-lg font-semibold text-brand-600">{finalTotal.toLocaleString("vi-VN")}đ</span>
+                </div>
+              </div>
+            )}
+
+            {(can(user, "editLeadCare") || isAdmin(user)) && !hasAppliedVoucher && (
+              <button
+                type="button"
+                onClick={handleRedeemVoucher}
+                disabled={redeemingVoucher || !discountCode.trim() || orderValueForVoucher <= 0}
+                className="w-full mt-4 bg-brand-600 hover:bg-brand-500 rounded-lg py-2 text-sm text-white disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
+              >
+                {redeemingVoucher && <Loader2 size={14} className="animate-spin" />}
+                {redeemingVoucher ? "Đang áp dụng..." : "Áp dụng mã giảm giá"}
+              </button>
+            )}
+
+            {hasAppliedVoucher && (
+              <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+                <p className="text-xs font-medium text-slate-500 mb-1">Voucher đã áp dụng</p>
+                {redemptions.map((r) => (
+                  <div key={r.id} className="flex items-center justify-between text-xs border border-slate-100 rounded-lg px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="font-mono font-medium text-slate-800">{r.voucherCode}</p>
+                      <p className="text-slate-400">{formatVietnamDateTime(r.redeemedAt)} · {r.redeemedBy}</p>
+                    </div>
+                    <p className="font-medium text-emerald-600 shrink-0">− {r.discountAmount.toLocaleString("vi-VN")}đ</p>
                   </div>
                 ))}
               </div>

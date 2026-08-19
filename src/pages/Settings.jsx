@@ -7,6 +7,7 @@ import EmptyState from "../components/ui/EmptyState.jsx";
 import { SkeletonBlock } from "../components/ui/Skeleton.jsx";
 import { useToast } from "../components/ui/ToastProvider.jsx";
 import { fetchUsers, updateUser, deleteUser, fetchActivityLogs, lockUser, unlockUser, resetUserPassword, isUserActive, fetchUserById, fetchUserLeads } from "../services/settingsService.js";
+import useEscapeKey from "../hooks/useEscapeKey.js";
 
 const roleStyle = {
   Administrator: "bg-red-50 text-red-700",
@@ -70,6 +71,9 @@ export default function Settings() {
   const [lockingUser, setLockingUser] = useState(false);
   const [resetTarget, setResetTarget] = useState(null); // user đang được reset mật khẩu
   const [detailUser, setDetailUser] = useState(null); // { user, leads, loading }
+  useEscapeKey(!!editingUser, () => setEditingUser(null));
+  useEscapeKey(!!resetTarget, () => setResetTarget(null));
+  useEscapeKey(!!detailUser, () => setDetailUser(null));
   const [resetForm, setResetForm] = useState({ newPassword: "", confirmPassword: "" });
   const [resetErrors, setResetErrors] = useState({});
   const [resettingPassword, setResettingPassword] = useState(false);

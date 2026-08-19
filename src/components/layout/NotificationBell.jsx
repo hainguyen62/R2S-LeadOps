@@ -9,6 +9,7 @@ import { fetchLeads, fetchMyLeads } from "../../services/leadService.js";
 import { USE_MOCK } from "../../services/apiClient.js";
 import { fetchNotifications, fetchUnreadCount, markNotificationRead, markAllNotificationsRead } from "../../services/notificationService.js";
 import EmptyState from "../ui/EmptyState.jsx";
+import { formatVietnamDateTime, getVietnamDateKey } from "../../utils/datetime.js";
 
 const typeConfig = {
   "hot-lead": { icon: Flame, tint: "bg-orange-50 text-orange-600" },
@@ -21,7 +22,7 @@ const typeConfig = {
 // không cần nhắc follow-up nữa dù còn sót nextFollowUpAt cũ (Mục leadStatusOrder).
 const COMPLETED_STATUS = "Đã đăng ký";
 
-const todayKey = () => new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+const todayKey = () => getVietnamDateKey();
 const storageKeyFor = (user) => `r2s_notifications_${user?.name || "guest"}`;
 
 // Sinh thông báo follow-up từ danh sách lead quá hạn/đến hạn — bỏ qua lead
@@ -41,7 +42,7 @@ function buildFollowUpNotifications(leads) {
         desc: isOverdue
           ? `Lịch hẹn gọi lại đã quá hạn ${hours} giờ.`
           : `Đến hạn liên hệ lại trong ${hours} giờ nữa.`,
-        time: due.toLocaleString("vi-VN"),
+        time: formatVietnamDateTime(due),
         read: false,
         leadId: l.id,
       };

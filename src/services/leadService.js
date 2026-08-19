@@ -12,6 +12,7 @@ import { apiFetch, USE_MOCK, mockDelay, ApiError, toBackendPaging, unwrapPage } 
 import { leads as mockLeads, careHistory as mockCareHistory } from "../data/mockData.js";
 import { scoreLead, classify, getScoreBreakdown, getScoreHistory, scoringGroups, deductionGroup } from "../utils/leadScoring.js";
 import { normalizePhone, normalizeEmail } from "../utils/validators.js";
+import { formatVietnamDate, formatVietnamDateTime } from "../utils/datetime.js";
 
 /* ------------------------------------------------------------
    Enum thật của backend (theo OpenAPI spec TTS2 gửi) — dùng khi
@@ -101,9 +102,7 @@ const SOURCE_ENUM_TO_LABEL = {
 
 function toVnDateTime(iso) {
   if (!iso) return "";
-  const d = new Date(iso);
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return formatVietnamDateTime(iso);
 }
 
 /** LeadResponse (backend) -> đúng field UI hiện đang dùng (name, status, score, cls...). */
@@ -450,7 +449,7 @@ export async function createLead(payload) {
     course: payload.course,
     source: payload.source,
     status: "Lead mới",
-    date: new Date().toLocaleDateString("vi-VN"),
+    date: formatVietnamDate(new Date()),
     phone: payload.phone?.trim() || "—",
     email: payload.email?.trim() || "—",
     assignee: payload.assignee || undefined, // rỗng/"Chưa phân công" -> chưa có người phụ trách
@@ -484,14 +483,27 @@ export async function updateLead(id, payload) {
   await mockDelay();
   const idx = mockLeads.findIndex((l) => matchId(l.id, id));
   if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
+  const prevScore = mockLeads[idx].score;
   mockLeads[idx] = { ...mockLeads[idx], ...payload };
   mockLeads[idx].score = scoreLead(mockLeads[idx]);
   mockLeads[idx].cls = classify(mockLeads[idx].score, mockLeads[idx]);
+  // BUG ĐÃ SỬA: trước đây hàm này tính lại điểm (score/cls) nhưng KHÔNG cập
+  // nhật scoreUpdatedAt — nên mọi lần sửa tín hiệu chấm điểm qua form "Sửa
+  // lead" đều không được dashboard "Lead thay đổi điểm mạnh trong ngày"
+  // (fetchChangedTodayLeads) nhận diện là "vừa thay đổi hôm nay", vì mốc
+  // thời gian dùng để lọc vẫn là ngày cũ (có thể là ngày mock cố định).
+  // Chỉ cập nhật mốc thời gian khi điểm THỰC SỰ đổi, để tránh việc sửa các
+  // trường không liên quan (SĐT, ghi chú...) cũng bị tính là "vừa đổi điểm".
+  if (mockLeads[idx].score !== prevScore) {
+    mockLeads[idx].scoreUpdatedAt = formatVietnamDateTime(new Date());
+  }
   return clone(mockLeads[idx]);
 }
 
-/** PATCH /api/leads/{id}/status — theo Mục V.4: cần lưu trạng thái cũ/mới + lý do */
-export async function updateLeadStatus(id, { newStatus, reason, note } = {}) {
+/** PATCH /api/leads/{id}/status — theo Mục V.4: cần lưu trạng thái cũ/mới + lý do
+ *  actorName: tên người ĐANG đăng nhập thực hiện thao tác (lấy từ useAuth() ở UI) —
+ *  dùng để ghi đúng "ai" đổi trạng thái vào lịch sử, thay vì hardcode "Hệ thống". */
+export async function updateLeadStatus(id, { newStatus, reason, note, actorName } = {}) {
   if (!USE_MOCK) {
     // UpdateLeadRequest (PUT /leads/{id}) không có field leadStage, và spec không
     // có endpoint PATCH /leads/{id}/status riêng — cần hỏi TTS2 cách đổi giai đoạn lead.
@@ -502,10 +514,11 @@ export async function updateLeadStatus(id, { newStatus, reason, note } = {}) {
   if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
   const oldStatus = mockLeads[idx].status;
   mockLeads[idx].status = newStatus;
+  const noteText = note || reason;
   appendActivity(id, {
-    text: `Chuyển trạng thái từ "${oldStatus}" sang "${newStatus}"`,
-    channel: note || reason || "Hệ thống",
-    date: new Date().toLocaleString("vi-VN"),
+    text: `Chuyển trạng thái từ "${oldStatus}" sang "${newStatus}"${noteText ? ` — ${noteText}` : ""}`,
+    channel: actorName || "Hệ thống",
+    date: formatVietnamDateTime(new Date()),
   });
   return clone(mockLeads[idx]);
 }
@@ -532,7 +545,7 @@ export async function assignLead(id, { assignee, ownerId, reason, actorName } = 
   appendActivity(id, {
     text: `Chuyển phụ trách từ "${oldAssignee || "Chưa phân công"}" sang "${assignee}"${reason ? ` — Lý do: ${reason}` : ""}`,
     channel: actorName || "Hệ thống",
-    date: new Date().toLocaleString("vi-VN"),
+    date: formatVietnamDateTime(new Date()),
   });
   return clone(mockLeads[idx]);
 }
@@ -619,14 +632,11 @@ export async function addLeadActivity(id, activity) {
 
 function appendActivity(id, activity) {
   if (!mockCareHistory[id]) mockCareHistory[id] = [];
-  const entry = { ...activity, date: activity.date || new Date().toLocaleString("vi-VN") };
+  const entry = { ...activity, date: activity.date || formatVietnamDateTime(new Date()) };
   mockCareHistory[id].push(entry);
 
   // Mục VII.5: hệ thống tính lại điểm khi lead có hành động chăm sóc mới.
   const idx = mockLeads.findIndex((l) => matchId(l.id, id));
-  // Giả lập hành vi backend thật: nextActionAt của activity sẽ được backend
-  // dùng để cập nhật LeadResponse.nextActionAt (UI đọc qua lead.nextFollowUpAt).
-  if (idx !== -1 && activity.nextActionAt) mockLeads[idx].nextFollowUpAt = activity.nextActionAt;
   if (idx !== -1) mockLeads[idx].scoreUpdatedAt = entry.date;
 
   return clone(entry);
@@ -653,7 +663,7 @@ export async function recalculateLeadScore(id) {
   if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
   mockLeads[idx].score = scoreLead(mockLeads[idx]);
   mockLeads[idx].cls = classify(mockLeads[idx].score, mockLeads[idx]);
-  mockLeads[idx].scoreUpdatedAt = new Date().toLocaleString("vi-VN");
+  mockLeads[idx].scoreUpdatedAt = formatVietnamDateTime(new Date());
   return { score: mockLeads[idx].score, cls: mockLeads[idx].cls, breakdown: getScoreBreakdown(mockLeads[idx]) };
 }
 

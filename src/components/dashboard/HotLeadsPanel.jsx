@@ -1,11 +1,18 @@
 import { useEffect, useState } from "react";
-import { Flame, Droplet, Clock, TrendingUp, TrendingDown, UserX } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Flame, Droplet, Clock, TrendingUp, TrendingDown, UserX, X, ExternalLink } from "lucide-react";
 import ChartCard from "../ui/ChartCard.jsx";
 import Avatar from "../ui/Avatar.jsx";
 import { SkeletonBlock } from "../ui/Skeleton.jsx";
 import EmptyState from "../ui/EmptyState.jsx";
 import { fetchHotLeads, fetchUnassignedLeads, fetchFollowUpLeads, fetchChangedTodayLeads, fetchUrgentLeads } from "../../services/dashboardService.js";
 import { priorityTier } from "../../utils/leadScoring.js";
+
+// Số dòng tối đa lấy khi mở modal "Xem tất cả" — đủ lớn để coi là "toàn bộ"
+// cho dữ liệu demo, nhưng vẫn có giới hạn để tránh gọi API kích thước bất
+// thường khi nối Back-end thật sau này (BE cũng giới hạn top-leads tối đa
+// 100 bản ghi/lần).
+const VIEW_ALL_LIMIT = 100;
 
 // 3 cấp độ ưu tiên (theo điểm) — dùng cho mode "priority" và "unassigned",
 // vì cả 2 đều hiển thị điểm/mức độ nóng-lạnh ở cột phải.
@@ -124,25 +131,175 @@ function UrgentBadge({ mode, lead }) {
   return <ScoreBadge score={lead.score} />; // mode === "priority"
 }
 
+// Chọn đúng hàm service theo mode — dùng chung cho danh sách rút gọn (5
+// dòng) trong panel VÀ modal "Xem tất cả" (đầy đủ), để 2 nơi luôn khớp dữ
+// liệu 100%, không lệch tiêu chí lọc.
+function fetcherForMode(mode) {
+  if (mode === "urgent") return fetchUrgentLeads;
+  if (mode === "unassigned") return fetchUnassignedLeads;
+  if (mode === "followup") return fetchFollowUpLeads;
+  if (mode === "changed") return fetchChangedTodayLeads;
+  return fetchHotLeads;
+}
+
+// 1 dòng lead — dùng chung cho panel rút gọn và modal "Xem tất cả", tránh
+// lặp JSX và đảm bảo giao diện đồng nhất giữa 2 nơi.
+function LeadRow({ lead: l, mode, selectedId, onSelect }) {
+  return (
+    <button
+      onClick={() => onSelect(l.id)}
+      className={`w-full flex items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors duration-200 hover:bg-brand-50/50 ${
+        selectedId === l.id ? "bg-brand-50/70" : ""
+      }`}
+    >
+      <Avatar name={l.name} initials={l.initials} size={30} />
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium text-slate-800 truncate">{l.name}</p>
+        <p className="text-[11px] text-slate-500 truncate">
+          {l.course}
+          {(mode === "unassigned" || (mode === "urgent" && l.urgentReason === "unassigned")) && (
+            <span className="text-slate-400"> · Chưa phân công</span>
+          )}
+        </p>
+      </div>
+      <UrgentBadge mode={mode} lead={l} />
+    </button>
+  );
+}
+
+// Modal "Xem tất cả" — hiển thị TOÀN BỘ danh sách của đúng mục đang chọn
+// (không dừng lại ở `limit` dòng như panel), thay vì điều hướng sang trang
+// Quản lý Lead chung chung (mất hết ngữ cảnh đang xem lead loại gì). Vẫn có
+// link phụ để mở trang Quản lý Lead cho ai cần công cụ lọc/sắp xếp đầy đủ.
+function ViewAllModal({ mode, onClose, onSelect, selectedId, onOpenLeadsPage }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const modeLabel = MODES.find((m) => m.value === mode)?.label || "";
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetcherForMode(mode)(VIEW_ALL_LIMIT)
+      .then((data) => {
+        if (!cancelled) setRows(data);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setRows([]);
+          setError(err?.message || "Không tải được danh sách.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode]);
+
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9998] bg-slate-900/50 flex items-center justify-center p-4"
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md shadow-elevated flex flex-col max-h-[80vh]">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 shrink-0">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-slate-900 truncate">{modeLabel}</h3>
+            {!loading && !error && (
+              <p className="text-xs text-slate-500 mt-0.5">
+                {rows.length}{rows.length >= VIEW_ALL_LIMIT ? "+" : ""} lead
+              </p>
+            )}
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 shrink-0">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto px-3 py-2 flex-1">
+          {loading ? (
+            <div className="space-y-2.5 px-2 py-2">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2.5 px-2 py-1">
+                  <SkeletonBlock className="w-[30px] h-[30px] rounded-full shrink-0" />
+                  <div className="flex-1 space-y-1.5">
+                    <SkeletonBlock className="w-2/3 h-3" />
+                    <SkeletonBlock className="w-1/3 h-2.5" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : error ? (
+            <EmptyState compact title="Chưa hỗ trợ" description={error} />
+          ) : rows.length === 0 ? (
+            <EmptyState compact title={emptyCopy[mode].title} description={emptyCopy[mode].description} />
+          ) : (
+            <div className="space-y-1">
+              {rows.map((l) => (
+                <LeadRow
+                  key={l.id}
+                  lead={l}
+                  mode={mode}
+                  selectedId={selectedId}
+                  onSelect={(id) => {
+                    onSelect(id);
+                    onClose();
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-3 border-t border-slate-100 shrink-0">
+          <button
+            onClick={onOpenLeadsPage}
+            className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline font-medium"
+          >
+            <ExternalLink size={12} /> Mở trang Quản lý Lead để lọc/sắp xếp sâu hơn
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 export default function HotLeadsPanel({ selectedId, onSelect, onViewAll, limit = 5 }) {
   const [mode, setMode] = useState("urgent");
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [showAllModal, setShowAllModal] = useState(false);
 
   // GET /api/dashboard/hot-leads | /unassigned-leads | /followup-leads | ...
   // xem services/dashboardService.js — mỗi mode gọi 1 endpoint/hàm riêng.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    const fetcher =
-      mode === "urgent" ? fetchUrgentLeads :
-      mode === "unassigned" ? fetchUnassignedLeads :
-      mode === "followup" ? fetchFollowUpLeads :
-      mode === "changed" ? fetchChangedTodayLeads :
-      fetchHotLeads;
-    fetcher(limit)
+    setError(null);
+    fetcherForMode(mode)(limit)
       .then((data) => {
         if (!cancelled) setRows(data);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setRows([]);
+          setError(err?.message || "Không tải được danh sách.");
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -166,8 +323,13 @@ export default function HotLeadsPanel({ selectedId, onSelect, onViewAll, limit =
         </select>
       }
       action={
+        // "Xem tất cả" mở modal hiển thị TOÀN BỘ danh sách của đúng mục đang
+        // chọn (mode hiện tại), thay vì điều hướng sang trang Quản lý Lead
+        // chung — nếu đi thẳng /leads sẽ mất hết ngữ cảnh "đang xem lead
+        // loại gì" và người dùng phải tự dò lại filter. Modal luôn dùng
+        // ĐÚNG hàm fetch của mode hiện tại nên số liệu khớp 100% với panel.
         <button
-          onClick={onViewAll}
+          onClick={() => setShowAllModal(true)}
           className="text-[11px] text-blue-600 hover:underline font-medium shrink-0"
         >
           Xem tất cả
@@ -186,32 +348,29 @@ export default function HotLeadsPanel({ selectedId, onSelect, onViewAll, limit =
             </div>
           ))}
         </div>
+      ) : error ? (
+        <EmptyState compact title="Chưa hỗ trợ" description={error} />
       ) : rows.length === 0 ? (
         <EmptyState compact title={emptyCopy[mode].title} description={emptyCopy[mode].description} />
       ) : (
       <div className="space-y-1 mt-1">
         {rows.map((l) => (
-          <button
-            key={l.id}
-            onClick={() => onSelect(l.id)}
-            className={`w-full flex items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors duration-200 hover:bg-brand-50/50 ${
-              selectedId === l.id ? "bg-brand-50/70" : ""
-            }`}
-          >
-            <Avatar name={l.name} initials={l.initials} size={30} />
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-slate-800 truncate">{l.name}</p>
-              <p className="text-[11px] text-slate-500 truncate">
-                {l.course}
-                {(mode === "unassigned" || (mode === "urgent" && l.urgentReason === "unassigned")) && (
-                  <span className="text-slate-400"> · Chưa phân công</span>
-                )}
-              </p>
-            </div>
-            <UrgentBadge mode={mode} lead={l} />
-          </button>
+          <LeadRow key={l.id} lead={l} mode={mode} selectedId={selectedId} onSelect={onSelect} />
         ))}
       </div>
+      )}
+
+      {showAllModal && (
+        <ViewAllModal
+          mode={mode}
+          selectedId={selectedId}
+          onSelect={onSelect}
+          onClose={() => setShowAllModal(false)}
+          onOpenLeadsPage={() => {
+            setShowAllModal(false);
+            onViewAll?.();
+          }}
+        />
       )}
     </ChartCard>
   );

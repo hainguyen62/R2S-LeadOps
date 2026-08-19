@@ -7,6 +7,9 @@ import {
   BarChart3,
   Settings,
   CalendarClock,
+  Webhook,
+  Ticket,
+  GraduationCap,
   X,
 } from "lucide-react";
 import { navItems } from "../../data/mockData.js";
@@ -20,6 +23,9 @@ const iconMap = {
   BarChart3,
   Settings,
   CalendarClock,
+  Webhook,
+  Ticket,
+  GraduationCap,
 };
 
 export default function Sidebar({ open = false, onClose, user }) {
