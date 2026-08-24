@@ -889,7 +889,7 @@ export default function Leads() {
                 {formErrors.name && <p className="text-[11px] text-red-600 mt-1">{formErrors.name}</p>}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-slate-500 block mb-1">Khóa học quan tâm *</label>
                   <select
@@ -954,7 +954,7 @@ export default function Leads() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-slate-500 block mb-1">Số điện thoại</label>
                   <input
@@ -994,7 +994,7 @@ export default function Leads() {
 
               {showExtended && (
                 <div className="space-y-3 border-t border-slate-100 pt-3">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs text-slate-500 block mb-1">Trường học</label>
                       <input
@@ -1030,7 +1030,7 @@ export default function Leads() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs text-slate-500 block mb-1">Thời gian dự kiến đăng ký</label>
                       <select

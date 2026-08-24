@@ -3,8 +3,15 @@ import Sidebar from "./Sidebar.jsx";
 import Topbar from "./Topbar.jsx";
 import ScrollToTopButton from "../ui/ScrollToTopButton.jsx";
 
+const MOBILE_BREAKPOINT = 768; // trùng breakpoint `md` của Tailwind
+
+function getDefaultSidebarOpen() {
+  if (typeof window === "undefined") return true;
+  return window.innerWidth >= MOBILE_BREAKPOINT;
+}
+
 export default function Layout({ user, onLogout, children }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(getDefaultSidebarOpen);
 
   return (
     <div className="min-h-screen w-full bg-slate-50 text-slate-800 flex">

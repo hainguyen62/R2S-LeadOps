@@ -14,6 +14,7 @@ import {
 } from "../data/mockData.js";
 import { priorityTier, classify, parseVnDate, largestScoreSwing } from "../utils/leadScoring.js";
 import { getVietnamDateKey, vietnamDateToDate } from "../utils/datetime.js";
+import { withStagePct } from "../utils/funnel.js";
 
 function clone(obj) {
   return typeof structuredClone === "function" ? structuredClone(obj) : JSON.parse(JSON.stringify(obj));
@@ -239,13 +240,16 @@ export async function fetchDashboardByRange(days) {
     value: Math.round((currentTotal * s.value) / sourceTotal),
   }));
 
-  // Phễu: giữ nguyên tỉ lệ chuyển đổi giữa các bậc so với bậc đầu ("Lead
+  // Phễu: `value` mỗi bậc được scale theo cùng tỉ lệ so với bậc đầu ("Lead
   // mới" = tổng lead trong kỳ, luôn khớp với thẻ KPI "Lead mới" + tổng
-  // "Lead theo ngày").
-  const funnelForRange = funnel.map((f) => {
-    const ratio = f.value / funnel[0].value;
-    return { name: f.name, fill: f.fill, value: Math.round(currentTotal * ratio), pct: `${Math.round(ratio * 100)}%` };
-  });
+  // "Lead theo ngày"), còn `pct` tính LẠI theo bậc LIỀN TRƯỚC (Mục XII.3),
+  // không phải theo tổng ban đầu — xem utils/funnel.js.
+  const funnelForRange = withStagePct(
+    funnel.map((f) => {
+      const ratio = f.value / funnel[0].value;
+      return { name: f.name, fill: f.fill, value: Math.round(currentTotal * ratio) };
+    })
+  );
   const registeredTotal = funnelForRange[funnelForRange.length - 1].value;
   const registeredRatio = funnel[funnel.length - 1].value / funnel[0].value;
   const registeredPrevTotal = Math.round(prevTotal * registeredRatio);

@@ -1,18 +1,12 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { User, Phone, Mail, BookOpen, ShieldCheck, Send, AlertTriangle, Loader2 } from "lucide-react";
 import PublicHeader from "../components/layout/PublicHeader.jsx";
 import { createLead, findDuplicateLead } from "../services/leadService.js";
-import { isValidPhone, isValidEmail } from "../utils/validators.js";
-
-const courses = [
-  "ReactJS & Frontend",
-  "Node.js & Backend",
-  "AWS Cloud Computing",
-];
+import { fetchCourses } from "../services/courseService.js";
+import { validateLeadForm } from "../utils/validators.js";
 
 export default function Consultation() {
-  const navigate = useNavigate();
   const [form, setForm] = useState({
     fullName: "",
     phone: "",
@@ -22,6 +16,30 @@ export default function Consultation() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  // Danh sách khóa học tải động từ courseService (nguồn dữ liệu duy nhất,
+  // đồng bộ với trang "Quản lý khóa học" của Admin — Mục III), chỉ hiện
+  // khóa đang mở (status ACTIVE), thay vì list gõ tay dễ lệch với hệ thống.
+  const [courseOptions, setCourseOptions] = useState([]);
+  const [coursesLoading, setCoursesLoading] = useState(true);
+
+  useEffect(() => {
+    let ignore = false;
+    fetchCourses()
+      .then((list) => {
+        if (ignore) return;
+        setCourseOptions((list || []).filter((c) => c.status === "ACTIVE"));
+      })
+      .catch(() => {
+        if (!ignore) setCourseOptions([]);
+      })
+      .finally(() => {
+        if (!ignore) setCoursesLoading(false);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -33,16 +51,22 @@ export default function Consultation() {
     e.preventDefault();
     setError("");
 
-    if (!form.fullName.trim() || !form.phone.trim() || !form.email.trim() || !form.course) {
-      setError("Đăng ký thất bại: vui lòng điền đầy đủ thông tin và chọn khóa học.");
+    if (!form.fullName.trim() || !form.course) {
+      setError("Đăng ký thất bại: vui lòng nhập họ tên và chọn khóa học.");
       return;
     }
-    if (!isValidPhone(form.phone)) {
-      setError("Đăng ký thất bại: số điện thoại không đúng định dạng (vd: 0901234567).");
-      return;
-    }
-    if (!isValidEmail(form.email)) {
-      setError("Đăng ký thất bại: email không đúng định dạng.");
+
+    // Chỉ cần CÓ ÍT NHẤT MỘT trong hai (số điện thoại hoặc email) — khớp
+    // "Thông tin lead bắt buộc" ở Module 2 kế hoạch, không bắt buộc cả hai.
+    const formErrors = validateLeadForm({
+      name: form.fullName,
+      course: form.course,
+      source: "Landing Page", // Consultation luôn gắn nguồn Landing Page, không cần người dùng chọn
+      phone: form.phone,
+      email: form.email,
+    });
+    if (formErrors.phone || formErrors.email) {
+      setError(`Đăng ký thất bại: ${formErrors.phone || formErrors.email}`);
       return;
     }
 
@@ -73,7 +97,6 @@ export default function Consultation() {
       });
 
       setSubmitted(true);
-      setTimeout(() => navigate("/login"), 1200);
     } catch (err) {
       setError(err.message || "Đăng ký thất bại. Vui lòng thử lại.");
     } finally {
@@ -120,9 +143,27 @@ export default function Consultation() {
                   Đăng ký thành công!
                 </p>
                 <p className="mt-1 text-xs text-emerald-600">
-                  Thông tin của bạn đã được ghi nhận, không trùng với lead nào trong hệ thống. Đang chuyển đến
-                  trang đăng nhập...
+                  Thông tin của bạn đã được ghi nhận, không trùng với lead nào trong hệ thống. Đội ngũ tư vấn
+                  viên sẽ sớm liên hệ với bạn.
                 </p>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm({ fullName: "", phone: "", email: "", course: "" });
+                      setSubmitted(false);
+                    }}
+                    className="rounded-lg border border-emerald-300 bg-white px-4 py-2 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-50"
+                  >
+                    Đăng ký cho người khác
+                  </button>
+                  <Link
+                    to="/login"
+                    className="rounded-lg bg-brand-700 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-brand-600"
+                  >
+                    Đến trang đăng nhập
+                  </Link>
+                </div>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -161,6 +202,9 @@ export default function Consultation() {
                     className={inputBase}
                   />
                 </div>
+                <p className="-mt-2 pl-1 text-[11px] text-slate-400">
+                  Bắt buộc có ít nhất một trong hai — điền cả hai giúp chúng tôi liên hệ nhanh hơn.
+                </p>
 
                 <div className="relative">
                   <BookOpen size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -168,20 +212,29 @@ export default function Consultation() {
                     name="course"
                     value={form.course}
                     onChange={handleChange}
-                    className={`${inputBase} appearance-none cursor-pointer ${
+                    disabled={coursesLoading}
+                    className={`${inputBase} appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${
                       form.course ? "text-slate-800" : "text-slate-400"
                     }`}
                   >
                     <option value="" disabled>
-                      Chọn khóa học
+                      {coursesLoading ? "Đang tải danh sách khóa học..." : "Chọn khóa học"}
                     </option>
-                    {courses.map((c) => (
-                      <option key={c} value={c} className="text-slate-800">
-                        {c}
+                    {courseOptions.map((c) => (
+                      <option key={c.id} value={c.name} className="text-slate-800">
+                        {c.name}
                       </option>
                     ))}
                   </select>
+                  {coursesLoading && (
+                    <Loader2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-slate-400" />
+                  )}
                 </div>
+                {!coursesLoading && courseOptions.length === 0 && (
+                  <p className="-mt-2 pl-1 text-[11px] text-red-500">
+                    Hiện chưa có khóa học nào đang mở. Vui lòng thử lại sau.
+                  </p>
+                )}
 
                 {error && (
                   <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
@@ -192,7 +245,7 @@ export default function Consultation() {
 
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || coursesLoading}
                   className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-brand-700 py-2.5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-brand-600 active:bg-brand-800 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}

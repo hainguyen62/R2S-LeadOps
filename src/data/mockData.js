@@ -5,6 +5,7 @@
 
 import { scoreLead, classify } from "../utils/leadScoring.js";
 import { getVietnamDateKey } from "../utils/datetime.js";
+import { withStagePct } from "../utils/funnel.js";
 
 // Danh sách khóa học kèm học phí (basePrice) và các dòng phí phụ thu (fees) —
 // xem services/courseService.js. Đây là seed ban đầu cho trang "Quản lý khóa
@@ -114,14 +115,16 @@ export const leadStatusOrder = [
   "Đã đăng ký",
 ];
 
-export const funnel = [
-  { name: "Lead mới", value: 248, pct: "100%", fill: "#3b82f6" },
-  { name: "Đã liên hệ", value: 154, pct: "62%", fill: "#22c55e" },
-  { name: "Đang tư vấn", value: 66, pct: "27%", fill: "#eab308" },
-  { name: "Đang cân nhắc", value: 40, pct: "16%", fill: "#f97316" },
-  { name: "Đã đặt cọc", value: 28, pct: "11%", fill: "#7e57c2" },
-  { name: "Đã đăng ký", value: 18, pct: "7%", fill: "#a855f7" },
-];
+// pct tính tự động theo Mục XII.3 (% so với bậc LIỀN TRƯỚC, không phải %
+// so với tổng lead ban đầu) — xem utils/funnel.js. Chỉ cần khai báo `value`.
+export const funnel = withStagePct([
+  { name: "Lead mới", value: 248, fill: "#3b82f6" },
+  { name: "Đã liên hệ", value: 154, fill: "#22c55e" },
+  { name: "Đang tư vấn", value: 66, fill: "#eab308" },
+  { name: "Đang cân nhắc", value: 40, fill: "#f97316" },
+  { name: "Đã đặt cọc", value: 28, fill: "#7e57c2" },
+  { name: "Đã đăng ký", value: 18, fill: "#a855f7" },
+]);
 
 export const statusStyle = {
   "Lead mới": "bg-green-50 text-green-700",

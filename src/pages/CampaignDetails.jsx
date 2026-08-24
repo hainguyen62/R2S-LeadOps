@@ -284,7 +284,7 @@ export default function CampaignDetails() {
               className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-slate-500 block mb-1">Khóa học</label>
               <input
@@ -302,7 +302,7 @@ export default function CampaignDetails() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-slate-500 block mb-1">Ngày bắt đầu</label>
               <input
@@ -322,7 +322,7 @@ export default function CampaignDetails() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-slate-500 block mb-1">Ngân sách (VNĐ)</label>
               <input
@@ -346,7 +346,7 @@ export default function CampaignDetails() {
           </div>
 
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide pt-2">Thông số UTM</p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-slate-500 block mb-1">UTM Source</label>
               <input
@@ -375,7 +375,7 @@ export default function CampaignDetails() {
               className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-slate-500 block mb-1">UTM Content</label>
               <input

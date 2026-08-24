@@ -271,7 +271,7 @@ export default function Campaigns() {
                   <option>Landing Page</option>
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-slate-500 block mb-1">Ngân sách (VNĐ)</label>
                   <input
