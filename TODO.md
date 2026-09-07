@@ -27,10 +27,10 @@ shadow, border, typography weight/contrast, hover/focus/transition.
 - [x] Background icon thêm `ring-1 ring-black/5` (giữ nguyên tint/màu).
 - [x] Value `font-semibold → font-bold` (không dùng extrabold).
 
-### 5. Charts (`LeadCharts`, `SourceFunnel`, `Reports`, `CampaignDetails`)
-- [x] Grid rõ hơn (`#eef2f7 → #e2e8f0`) — LeadCharts, SourceFunnel, CampaignDetails.
-- [x] Tooltip shadow mạnh hơn, border rõ — LeadCharts, SourceFunnel, Reports, CampaignDetails.
-- [x] Area/Line `activeDot` to hơn + stroke trắng dày (hover rõ) — LeadCharts, CampaignDetails.
+### 5. Charts (`LeadCharts`, `SourceFunnel`, `Reports`)
+- [x] Grid rõ hơn (`#eef2f7 → #e2e8f0`) — LeadCharts, SourceFunnel.
+- [x] Tooltip shadow mạnh hơn, border rõ — LeadCharts, SourceFunnel, Reports.
+- [x] Area/Line `activeDot` to hơn + stroke trắng dày (hover rõ) — LeadCharts.
 - [x] Bar chart `cursor` fill rõ hơn — SourceFunnel.
 
 ### 6. Table (`LeadTable`, `Leads`, `Settings`)
@@ -51,7 +51,7 @@ shadow, border, typography weight/contrast, hover/focus/transition.
 - [x] Active: `shadow-md`, `transition-all duration-200`.
 - [x] Inactive hover mượt.
 
-### 10. Forms (`Leads`, `Settings`, `Profile`, `CampaignDetails`)
+### 10. Forms (`Leads`, `Settings`, `Profile`)
 - [x] Input border rõ hơn (`slate-300`), focus `ring-2 ring-brand-500/20 border-brand-500`.
 - [x] Placeholder `text-slate-500`.
 
@@ -79,10 +79,10 @@ shadow, border, typography weight/contrast, hover/focus/transition.
 
 ## API Integration (chờ Back-end TTS2) — Front-end đã sẵn sàng
 
-- [x] Tầng service `src/services/` (auth/lead/campaign/dashboard/settings) — mọi page gọi qua đây, không import `mockData` trực tiếp nữa (trừ các style map tĩnh như `statusStyle`).
+- [x] Tầng service `src/services/` (auth/lead/dashboard/settings) — mọi page gọi qua đây, không import `mockData` trực tiếp nữa (trừ các style map tĩnh như `statusStyle`).
 - [x] `apiClient.js` — chuyển `VITE_USE_MOCK=false` trong `.env` để dùng API thật, không cần sửa UI.
 - [x] `utils/validators.js` — validate dùng chung cho Login/Register/Leads (đúng định dạng email/phone, khớp Mục VI/XVI kế hoạch).
-- [x] Loading/Error/Empty state cho toàn bộ trang tải dữ liệu (Dashboard, Leads, LeadDetail, Campaigns, CampaignDetails, History, Reports, Settings, Profile).
+- [x] Loading/Error/Empty state cho toàn bộ trang tải dữ liệu (Dashboard, Leads, LeadDetail, History, Reports, Settings, Profile).
 - [x] Unit test cơ bản (`npm run test`) cho leadScoring, validators, leadService.
 - [ ] Kết nối thật với Back-end khi TTS2 gửi Swagger — đối chiếu lại field name response thực tế với `services/*.js`.
 - [ ] Viết thêm Front-end Test cho component (hiện chỉ có test cho utils/services, chưa test render UI).

@@ -1,9 +1,9 @@
 /* ============================================================
-   VOUCHER SERVICE — chương trình giảm giá gắn với lead/chiến dịch.
-   Backend (api-1.json) chưa có resource Voucher, nên dùng đúng pattern
-   đã áp dụng cho Campaign: lưu localStorage, độc lập USE_MOCK, và tái
-   sử dụng leadService (addLeadActivity) để việc áp voucher luôn được
-   ghi vào lịch sử chăm sóc như mọi hành động khác trong hệ thống.
+   VOUCHER SERVICE — chương trình giảm giá gắn với lead.
+   Backend (api-1.json) chưa có resource Voucher, nên lưu localStorage,
+   độc lập USE_MOCK, và tái sử dụng leadService (addLeadActivity) để việc
+   áp voucher luôn được ghi vào lịch sử chăm sóc như mọi hành động khác
+   trong hệ thống.
    ============================================================ */
 
 import { ApiError } from "./apiClient.js";
@@ -59,7 +59,7 @@ function saveRedemptions(list) {
   getStorage()?.setItem(REDEMPTIONS_KEY, JSON.stringify(list));
 }
 
-/** Trạng thái hiển thị suy ra từ ngày hết hạn — tương tự getCampaignDisplayStatus. */
+/** Trạng thái hiển thị suy ra từ ngày hết hạn. */
 export function getVoucherDisplayStatus(v) {
   if (v.status === "DISABLED") return "Đã tắt";
   const today = vietnamDateToDate(getVietnamDateKey());
@@ -137,7 +137,6 @@ export async function createVoucher(payload) {
     discountType: payload.discountType === "FIXED_AMOUNT" ? "FIXED_AMOUNT" : "PERCENT",
     discountValue: Number(payload.discountValue),
     courseId: payload.courseId || null,
-    campaignId: payload.campaignId ? Number(payload.campaignId) : null,
     startDate: payload.startDate || null,
     endDate: payload.endDate || null,
     usageLimit: payload.usageLimit ? Number(payload.usageLimit) : null,
@@ -165,7 +164,6 @@ export async function updateVoucher(id, payload) {
     ...payload,
     code,
     discountValue: Number(payload.discountValue),
-    campaignId: payload.campaignId ? Number(payload.campaignId) : null,
     usageLimit: payload.usageLimit ? Number(payload.usageLimit) : null,
     usageLimitPerLead: payload.usageLimitPerLead ? Number(payload.usageLimitPerLead) : 1,
   };

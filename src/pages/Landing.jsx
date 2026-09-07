@@ -42,8 +42,8 @@ const features = [
     iconBg: "bg-orange-50",
   },
   {
-    title: "Quản lý chiến dịch",
-    body: "Theo dõi ngân sách, nguồn và số lead từ Facebook, Google, TikTok và landing page.",
+    title: "Theo dõi nguồn lead",
+    body: "Theo dõi số lượng và chất lượng lead từ Facebook, Google, TikTok và landing page.",
     icon: GitBranch,
     tint: "from-brand-500/15 to-brand-600/5",
     iconColor: "text-brand-600",
@@ -74,7 +74,7 @@ const roles = [
     tint: "border-brand-200 bg-brand-50/50",
     iconTint: "bg-brand-100 text-brand-700",
     points: [
-      "Theo dõi hiệu quả từng chiến dịch và nguồn lead",
+      "Theo dõi hiệu quả từng nguồn lead",
       "So sánh CPL giữa Facebook, TikTok, Google",
       "Xuất báo cáo CSV cho ban lãnh đạo",
     ],

@@ -1,7 +1,7 @@
 /* ============================================================
    COURSE SERVICE — quản lý khóa học và học phí (Mục III: Administrator
    "Quản lý khóa học"). Backend (api-1.json) chưa có resource Course kèm giá,
-   nên dùng đúng pattern đã áp dụng cho Campaign/Voucher: lưu localStorage,
+   nên dùng đúng pattern đã áp dụng cho Voucher: lưu localStorage,
    độc lập USE_MOCK. Đây là nguồn dữ liệu học phí DUY NHẤT — được LeadDetail
    dùng để tính "Học phí" + "Tổng tiền cuối cùng" của từng lead theo khóa học
    lead đó chọn.

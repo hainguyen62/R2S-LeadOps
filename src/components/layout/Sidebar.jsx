@@ -2,7 +2,6 @@ import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
   Users,
-  GitBranch,
   History,
   BarChart3,
   Settings,
@@ -18,7 +17,6 @@ import { canAccessPath } from "../../utils/permissions.js";
 const iconMap = {
   LayoutDashboard,
   Users,
-  GitBranch,
   History,
   BarChart3,
   Settings,

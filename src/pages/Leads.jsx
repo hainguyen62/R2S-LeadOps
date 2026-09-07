@@ -81,9 +81,10 @@ export default function Leads() {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [advFilters, setAdvFilters] = useState({
     dateFrom: "", dateTo: "", scoreMin: "", scoreMax: "", overdueOnly: false,
-    course: "Tất cả", source: "Tất cả", assignee: "Tất cả", campaign: "Tất cả",
-  });  const [advFiltersDraft, setAdvFiltersDraft] = useState(advFilters);
-  const [filterOptions, setFilterOptions] = useState({ courses: [], sources: [], assignees: [], campaigns: [] });
+    course: "Tất cả", source: "Tất cả", assignee: "Tất cả",
+  });
+  const [advFiltersDraft, setAdvFiltersDraft] = useState(advFilters);
+  const [filterOptions, setFilterOptions] = useState({ courses: [], sources: [], assignees: [] });
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState(null); // 'desc' | 'asc' | null
@@ -114,7 +115,7 @@ export default function Leads() {
   }, []);
 
   // GET /api/leads/filter-options — nạp 1 lần cho các lựa chọn Khóa học/Nguồn/
-  // Người phụ trách/Chiến dịch trong bộ lọc nâng cao.
+  // Người phụ trách trong bộ lọc nâng cao.
   useEffect(() => {
     fetchLeadFilterOptions().then(setFilterOptions).catch(() => {});
   }, [refreshTick]);
@@ -155,7 +156,6 @@ export default function Leads() {
       course: advFilters.course,
       source: advFilters.source,
       assignee: advFilters.assignee,
-      campaign: advFilters.campaign,
       archivedOnly: showArchived,
     }, user?.name)
       .then(({ items, total: t }) => {
@@ -183,7 +183,6 @@ export default function Leads() {
     email: "",
     // Mở rộng (tùy chọn)
     assignee: "", // "" = Chưa phân công
-    campaign: "",
     school: "",
     currentLevel: "",
     studyGoal: "",
@@ -248,7 +247,6 @@ export default function Leads() {
         course: advFilters.course,
         source: advFilters.source,
         assignee: advFilters.assignee,
-        campaign: advFilters.campaign,
       });
       exportToCsv(items, ["name", "course", "source", "status", "score", "cls", "date", "phone", "email"], "r2s-leads.csv");
     } catch (err) {
@@ -438,7 +436,7 @@ export default function Leads() {
           >
             <ListFilter size={14} /> Bộ lọc
             {(advFilters.dateFrom || advFilters.dateTo || advFilters.scoreMin || advFilters.scoreMax || advFilters.overdueOnly ||
-              advFilters.course !== "Tất cả" || advFilters.source !== "Tất cả" || advFilters.assignee !== "Tất cả" || advFilters.campaign !== "Tất cả" ||
+              advFilters.course !== "Tất cả" || advFilters.source !== "Tất cả" || advFilters.assignee !== "Tất cả" ||
               statusFilter !== "Tất cả" || classFilter !== "Tất cả") && (
               <span className="w-1.5 h-1.5 rounded-full bg-brand-600" />
             )}
@@ -572,26 +570,13 @@ export default function Leads() {
                 </select>
               </div>
             )}
-            <div>
-              <label className="text-xs text-slate-500 block mb-1">Chiến dịch</label>
-              <select
-                value={advFiltersDraft.campaign}
-                onChange={(e) => setAdvFiltersDraft({ ...advFiltersDraft, campaign: e.target.value })}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"
-              >
-                <option value="Tất cả">Tất cả</option>
-                {filterOptions.campaigns.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
           </div>
           <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
             <button
               onClick={() => {
                 const cleared = {
                   dateFrom: "", dateTo: "", scoreMin: "", scoreMax: "", overdueOnly: false,
-                  course: "Tất cả", source: "Tất cả", assignee: "Tất cả", campaign: "Tất cả",
+                  course: "Tất cả", source: "Tất cả", assignee: "Tất cả",
                 };
                 setAdvFiltersDraft(cleared);
                 setAdvFilters(cleared);
@@ -938,20 +923,6 @@ export default function Leads() {
                   </select>
                   {formErrors.source && <p className="text-[11px] text-red-600 mt-1">{formErrors.source}</p>}
                 </div>
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-500 block mb-1">Chiến dịch (nếu có)</label>
-                <select
-                  value={form.campaign}
-                  onChange={(e) => setForm({ ...form, campaign: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
-                >
-                  <option value="">Không thuộc chiến dịch nào</option>
-                  {filterOptions.campaigns.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
               </div>
 
               <div>

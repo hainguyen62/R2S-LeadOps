@@ -33,7 +33,6 @@ function appsScriptSnippet(secretToken) {
     email: r["Email"] ? r["Email"][0] : "",
     course: r["Khóa học quan tâm"] ? r["Khóa học quan tâm"][0] : "",
     city: r["Thành phố"] ? r["Thành phố"][0] : "",
-    campaign: r["Mã chiến dịch (UTM)"] ? r["Mã chiến dịch (UTM)"][0] : "",
   };
   UrlFetchApp.fetch("${WEBHOOK_URL}", {
     method: "post",

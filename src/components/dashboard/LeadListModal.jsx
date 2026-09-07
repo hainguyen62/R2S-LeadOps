@@ -9,13 +9,12 @@ import useEscapeKey from "../../hooks/useEscapeKey.js";
 
 /**
  * Modal drill-down dùng chung: click 1 KPI / cột nguồn / cột trạng thái ở
- * Dashboard, Reports, hoặc Chi tiết chiến dịch -> hiện danh sách lead khớp
- * bộ lọc tương ứng, 5 cột: ID, Tên, SĐT, Score, Trạng thái (Mục 8.3 và các
- * mục "Click KPI/nguồn/trạng thái để xem Lead tương ứng").
+ * Dashboard hoặc Reports -> hiện danh sách lead khớp bộ lọc tương ứng,
+ * 5 cột: ID, Tên, SĐT, Score, Trạng thái.
  *
  * props:
- *   title    — tiêu đề modal, vd. "Lead nóng · Tuyển sinh khóa Java Backend"
- *   filters  — object truyền thẳng cho fetchLeads() (status/cls/source/campaign...)
+ *   title    — tiêu đề modal, vd. "Lead nóng · Facebook"
+ *   filters  — object truyền thẳng cho fetchLeads() (status/cls/source...)
  *   onClose  — đóng modal
  */
 export default function LeadListModal({ title, filters, onClose }) {

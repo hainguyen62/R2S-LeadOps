@@ -1,15 +1,14 @@
 /* ============================================================
    CHART COLORS — bảng màu dùng chung cho các biểu đồ dạng cột
-   (Nguồn lead ở Dashboard, "Hiệu quả nguồn lead" và "Hiệu quả theo
-   chiến dịch" ở Reports) để mỗi cột có 1 màu đặc trưng riêng, dễ
-   phân biệt, thay vì tất cả cùng 1 màu.
+   (Nguồn lead ở Dashboard, "Hiệu quả nguồn lead" ở Reports) để mỗi
+   cột có 1 màu đặc trưng riêng, dễ phân biệt, thay vì tất cả cùng 1 màu.
 
-   - getCategoryColor(key): trả về màu ổn định cho 1 tên (nguồn/chiến
-     dịch...) — cùng tên luôn ra cùng màu ở mọi biểu đồ trong app nhờ
+   - getCategoryColor(key): trả về màu ổn định cho 1 tên (nguồn...)
+     — cùng tên luôn ra cùng màu ở mọi biểu đồ trong app nhờ
      hash trên chuỗi, không phụ thuộc thứ tự trong mảng dữ liệu.
    - tint(hex, amount): tạo ra 1 biến thể sáng hơn của cùng 1 màu gốc
      — dùng cho trường hợp 2 cột thuộc cùng 1 nhóm (vd. "Lead" và
-     "Đã đăng ký" của cùng 1 chiến dịch) cần "cùng chất màu" (cùng
+     "Đã đăng ký" của cùng 1 nguồn) cần "cùng chất màu" (cùng
      tông/hue) nhưng vẫn phải phân biệt được với nhau.
    ============================================================ */
 
@@ -41,7 +40,7 @@ function hashString(str) {
   return Math.abs(hash);
 }
 
-/** Màu ổn định cho 1 tên (nguồn, chiến dịch...) — cùng tên luôn cùng màu. */
+/** Màu ổn định cho 1 tên (nguồn...) — cùng tên luôn cùng màu. */
 export function getCategoryColor(key) {
   return PALETTE[hashString(key) % PALETTE.length];
 }

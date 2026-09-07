@@ -71,7 +71,7 @@ function toLeadSourceEnum(label) {
 }
 
 /**
- * payload dạng UI hiện tại (name, phone, email, source, campaign, studyGoal...)
+ * payload dạng UI hiện tại (name, phone, email, source, studyGoal...)
  * -> đúng field của CreateLeadRequest bên backend. Các field UI có mà backend
  * không có (course, status, assignee, school, city) sẽ không được gửi lên,
  * vì spec hiện tại không có chỗ lưu — cần trao đổi thêm với TTS2 nếu bắt buộc.
@@ -84,7 +84,6 @@ function toCreateLeadRequest(payload) {
     // trước đây chỉ .trim() nên nhánh USE_MOCK=false lưu sai hoa/thường.
     email: payload.email?.trim() ? normalizeEmail(payload.email) : undefined,
     leadSource: payload.source ? toLeadSourceEnum(payload.source) : undefined,
-    campaignCode: payload.campaign?.trim() || undefined,
     currentLevel: payload.currentLevel || undefined,
     careerGoal: payload.studyGoal?.trim() || undefined,
     painPoint: payload.note?.trim() || undefined,
@@ -158,7 +157,6 @@ export function mapLeadResponseToUi(lead) {
     email: lead.email,
     assignee: lead.ownerName || undefined,
     ownerId: lead.ownerId ?? undefined,
-    campaign: lead.campaignCode || undefined,
     currentLevel: lead.currentLevel || undefined,
     studyGoal: lead.careerGoal || undefined,
     expectedEnrollment: lead.startTimeline || undefined,
@@ -247,20 +245,19 @@ export async function fetchMyLeads(params = {}, currentUserName) {
  * GET /api/leads — danh sách lead có tìm kiếm/lọc/sắp xếp/phân trang.
  * params: { query, status, cls, sortKey, sortDir, page, pageSize,
  *           dateFrom, dateTo, scoreMin, scoreMax, overdueOnly,
- *           course, source, assignee, campaign }
+ *           course, source, assignee }
  * Trả về { items, total, page, pageSize } giống chuẩn phân trang REST phổ biến.
  * Lead đã lưu trữ (archived=true) không hiển thị trong danh sách (Mục IX.2:
  * không xóa cứng, dùng trạng thái lưu trữ thay cho xóa).
  */
 export async function fetchLeads(params = {}) {
   if (!USE_MOCK) {
-    const { query, status, page, pageSize, scoreMin, scoreMax, source, campaign, ownerId } = params;
+    const { query, status, page, pageSize, scoreMin, scoreMax, source, ownerId } = params;
     const res = await apiFetch("/leads", {
       params: {
         search: query || undefined,
         stage: status && status !== "Tất cả" ? STATUS_TO_STAGE[status] || status : undefined,
         source: source && source !== "Tất cả" ? toLeadSourceEnum(source) : undefined,
-        campaignId: campaign && campaign !== "Tất cả" ? campaign : undefined, // backend lọc theo campaignId (số), không phải mã chiến dịch dạng chuỗi — cần map lại khi có API campaign
         ownerId: ownerId || undefined, // UI hiện lọc theo tên nhân viên (assignee); cần đổi sang chọn theo ownerId để lọc được ở backend thật
         minScore: scoreMin,
         maxScore: scoreMax,
@@ -288,7 +285,6 @@ export async function fetchLeads(params = {}) {
     course = "Tất cả",
     source = "Tất cả",
     assignee = "Tất cả",
-    campaign = "Tất cả",
     archivedOnly = false, // true = chỉ lấy lead ĐÃ lưu trữ (trang "Lead lưu trữ")
   } = params;
 
@@ -324,11 +320,10 @@ export async function fetchLeads(params = {}) {
     const matchSource = source === "Tất cả" || l.source === source;
     const matchAssignee =
       assignee === "Tất cả" || (assignee === "Chưa phân công" ? !l.assignee : l.assignee === assignee);
-    const matchCampaign = campaign === "Tất cả" || l.campaign === campaign;
 
     return (
       matchQ && matchS && matchC && matchDateFrom && matchDateTo && matchScoreMin && matchScoreMax &&
-      matchOverdue && matchCourse && matchSource && matchAssignee && matchCampaign
+      matchOverdue && matchCourse && matchSource && matchAssignee
     );
   });
 
@@ -370,9 +365,9 @@ function getSortValue(l, key) {
 }
 
 /**
- * Danh sách giá trị duy nhất để đổ vào 4 bộ lọc nâng cao mới (Khóa học, Nguồn,
- * Nhân viên phụ trách, Chiến dịch) — lấy trên TOÀN BỘ dữ liệu, không chỉ trang
- * hiện tại, để bộ lọc luôn đầy đủ lựa chọn dù đang ở trang nào / đã lọc gì.
+ * Danh sách giá trị duy nhất để đổ vào 3 bộ lọc nâng cao (Khóa học, Nguồn,
+ * Nhân viên phụ trách) — lấy trên TOÀN BỘ dữ liệu, không chỉ trang hiện tại,
+ * để bộ lọc luôn đầy đủ lựa chọn dù đang ở trang nào / đã lọc gì.
  */
 export async function fetchLeadFilterOptions() {
   if (!USE_MOCK) return notSupportedByBackend("danh sách giá trị lọc (filter-options)");
@@ -382,12 +377,10 @@ export async function fetchLeadFilterOptions() {
   const sources = [...new Set(active.map((l) => l.source).filter(Boolean))].sort();
   const assignees = [...new Set(active.map((l) => l.assignee).filter(Boolean))].sort();
   const hasUnassigned = active.some((l) => !l.assignee);
-  const campaignsList = [...new Set(active.map((l) => l.campaign).filter(Boolean))].sort();
   return {
     courses,
     sources,
     assignees: hasUnassigned ? [...assignees, "Chưa phân công"] : assignees,
-    campaigns: campaignsList,
   };
 }
 
@@ -494,7 +487,6 @@ export async function createLead(payload) {
     phone: payload.phone?.trim() ? normalizePhone(payload.phone) : "—",
     email: payload.email?.trim() ? normalizeEmail(payload.email) : "—",
     assignee: payload.assignee || undefined, // rỗng/"Chưa phân công" -> chưa có người phụ trách
-    campaign: payload.campaign?.trim() || undefined,
     school: payload.school?.trim() || undefined,
     currentLevel: payload.currentLevel || undefined,
     studyGoal: payload.studyGoal?.trim() || undefined,

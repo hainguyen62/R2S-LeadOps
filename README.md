@@ -62,8 +62,8 @@ src/
 │   └── ui/          # Pill, Avatar, StatCard, ChartCard
 ├── data/
 │   └── mockData.js  # Dữ liệu demo — dùng làm "database" mock trong services/*
-├── services/        # Tầng gọi API (auth, lead, campaign, dashboard, settings) — xem README ở trên
-├── pages/           # Login, Dashboard, Leads, Campaigns, History, Reports, Settings
+├── services/        # Tầng gọi API (auth, lead, dashboard, settings) — xem README ở trên
+├── pages/           # Login, Dashboard, Leads, History, Reports, Settings
 ├── utils/           # exportCsv, importCsv, leadScoring, validators
 ├── App.jsx          # Routing & auth state
 └── main.jsx
@@ -75,10 +75,9 @@ src/
 2. Dashboard tuyển sinh → `Dashboard.jsx`, `services/dashboardService.js`
 3. Quản lý lead (thêm, tìm, lọc, sắp xếp, phân trang) → `Leads.jsx`, `services/leadService.js`
 4. Chấm điểm & phân loại lead nóng/ấm/lạnh → `utils/leadScoring.js`
-5. Quản lý nguồn lead & chiến dịch → `Campaigns.jsx`, `services/campaignService.js`
-6. Lịch sử chăm sóc → `History.jsx`
-7. Báo cáo & xuất CSV → `Reports.jsx`, `utils/exportCsv.js`
-8. Cài đặt, tài khoản, nhật ký hoạt động → `Settings.jsx`, `services/settingsService.js`
+5. Lịch sử chăm sóc → `History.jsx`
+6. Báo cáo & xuất CSV → `Reports.jsx`, `utils/exportCsv.js`
+7. Cài đặt, tài khoản, nhật ký hoạt động → `Settings.jsx`, `services/settingsService.js`
 
 ## Ghi chú
 

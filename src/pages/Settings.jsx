@@ -43,7 +43,7 @@ const roles = ["Administrator", "Leader Marketing", "Sales/Admissions", "Marketi
 const defaultMatrix = {
   "Quản lý toàn bộ lead": { Administrator: true, "Leader Marketing": true, "Sales/Admissions": false, "Marketing Staff": false },
   "Xem lead được phân công": { Administrator: true, "Leader Marketing": true, "Sales/Admissions": true, "Marketing Staff": false },
-  "Quản lý chiến dịch & nguồn lead": { Administrator: true, "Leader Marketing": true, "Sales/Admissions": false, "Marketing Staff": true },
+  "Quản lý nguồn lead": { Administrator: true, "Leader Marketing": true, "Sales/Admissions": false, "Marketing Staff": true },
   "Xem Dashboard": { Administrator: true, "Leader Marketing": true, "Sales/Admissions": false, "Marketing Staff": true },
   "Cấu hình chấm điểm (Lead Scoring)": { Administrator: true, "Leader Marketing": false, "Sales/Admissions": false, "Marketing Staff": false },
   "Quản lý tài khoản người dùng": { Administrator: true, "Leader Marketing": false, "Sales/Admissions": false, "Marketing Staff": false },

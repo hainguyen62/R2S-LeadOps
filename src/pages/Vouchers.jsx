@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { Plus, Ticket, X, Trash2, AlertCircle, Loader2, Percent, Banknote, Power, Users } from "lucide-react";
 import { fetchVouchers, createVoucher, updateVoucher, updateVoucherStatus, deleteVoucher, getVoucherDisplayStatus, getVoucherDeleteConstraint, fetchVoucherRedemptions } from "../services/voucherService.js";
 import { courseOptions, leadStatusOrder } from "../data/mockData.js";
-import { fetchCampaigns } from "../services/campaignService.js";
 import { SkeletonBlock } from "../components/ui/Skeleton.jsx";
 import ConfirmDialog from "../components/ui/ConfirmDialog.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
@@ -126,7 +125,6 @@ const EMPTY_FORM = {
   discountType: "PERCENT",
   discountValue: "",
   courseId: "",
-  campaignId: "",
   startDate: "",
   endDate: "",
   usageLimit: "",
@@ -139,7 +137,6 @@ export default function Vouchers() {
   const user = useAuth();
   const canManage = can(user, "manageVouchers");
   const [vouchers, setVouchers] = useState([]);
-  const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -157,11 +154,10 @@ export default function Vouchers() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    Promise.all([fetchVouchers(), fetchCampaigns()])
-      .then(([vs, cs]) => {
+    fetchVouchers()
+      .then((vs) => {
         if (cancelled) return;
         setVouchers(vs);
-        setCampaigns(cs);
       })
       .catch((err) => {
         if (!cancelled) setError(err.message || "Không thể tải danh sách voucher.");
@@ -190,7 +186,6 @@ export default function Vouchers() {
       discountType: v.discountType,
       discountValue: String(v.discountValue),
       courseId: v.courseId || "",
-      campaignId: v.campaignId ? String(v.campaignId) : "",
       startDate: v.startDate || "",
       endDate: v.endDate || "",
       usageLimit: v.usageLimit ? String(v.usageLimit) : "",
@@ -412,29 +407,16 @@ export default function Vouchers() {
                 />
                 {fieldErrors.discountValue && <p className="text-[11px] text-red-500 mt-1">{fieldErrors.discountValue}</p>}
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-slate-500 block mb-1">Áp dụng khóa học</label>
-                  <select
-                    value={form.courseId}
-                    onChange={(e) => setForm({ ...form, courseId: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  >
-                    <option value="">Mọi khóa học</option>
-                    {courseOptions.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500 block mb-1">Gắn chiến dịch</label>
-                  <select
-                    value={form.campaignId}
-                    onChange={(e) => setForm({ ...form, campaignId: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  >
-                    <option value="">Không gắn</option>
-                    {campaigns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Áp dụng khóa học</label>
+                <select
+                  value={form.courseId}
+                  onChange={(e) => setForm({ ...form, courseId: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+                >
+                  <option value="">Mọi khóa học</option>
+                  {courseOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>

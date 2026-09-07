@@ -11,8 +11,6 @@ import CreateAccount from "./pages/CreateAccount.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Leads from "./pages/Leads.jsx";
 import LeadDetail from "./pages/LeadDetail.jsx";
-import Campaigns from "./pages/Campaigns.jsx";
-import CampaignDetails from "./pages/CampaignDetails.jsx";
 import History from "./pages/History.jsx";
 import Reports from "./pages/Reports.jsx";
 import Settings from "./pages/Settings.jsx";
@@ -71,8 +69,6 @@ export default function App() {
           <Route path="/" element={<RequireAccess><Dashboard /></RequireAccess>} />
           <Route path="/leads" element={<Leads />} />
           <Route path="/leads/:id" element={<LeadDetail />} />
-          <Route path="/campaigns" element={<RequireAccess><Campaigns /></RequireAccess>} />
-          <Route path="/campaigns/:id" element={<RequireAccess><CampaignDetails /></RequireAccess>} />
           <Route path="/history" element={<RequireAccess><History /></RequireAccess>} />
           <Route path="/reports" element={<RequireAccess><Reports /></RequireAccess>} />
           <Route path="/settings" element={<RequireAccess><Settings /></RequireAccess>} />

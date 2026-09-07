@@ -59,10 +59,8 @@ export const courses = [
   },
 ];
 
-// Danh sách tên khóa học dùng chung cho toàn app (form Lead, form Campaign,
-// bộ lọc...) — suy ra từ `courses` để luôn khớp với dữ liệu học phí, tránh
-// lệch tên giữa 2 nơi (đã có trường hợp lead dùng "BA" trong khi danh sách
-// dùng "Business Analyst" — đã chuẩn hóa lại).
+// Danh sách tên khóa học dùng chung cho toàn app (form Lead, bộ lọc...) —
+// suy ra từ `courses` để luôn khớp với dữ liệu học phí, tránh lệch tên.
 export const courseOptions = courses.map((c) => c.name);
 
 
@@ -177,7 +175,6 @@ export const leads = [
   {
     id: 1, name: "Nguyễn Minh Anh", course: "Java Backend", source: "Facebook", status: "Đang tư vấn",
     date: "12/05/2026 09:15", phone: "0901 234 567", email: "minhanh@gmail.com", assignee: "Tư vấn viên A",
-    campaign: "Tuyển sinh khóa Java Backend",
     nextFollowUpAt: daysFromNow(-2), // quá hạn 2 ngày
     facebook: "https://facebook.com/minhanh.nguyen",
     signals: {
@@ -190,7 +187,6 @@ export const leads = [
   {
     id: 2, name: "Trần Quốc Huy", course: "ReactJS", source: "TikTok", status: "Lead mới",
     date: "12/05/2026 09:05", phone: "0902 345 678", email: "quochuy@gmail.com", assignee: "Tư vấn viên A",
-    campaign: "TikTok Viral – ReactJS",
     nextFollowUpAt: null,
     tiktok: "https://tiktok.com/@quochuy.tran",
     signals: {
@@ -203,7 +199,6 @@ export const leads = [
   {
     id: 3, name: "Lê Thu Hà", course: "Flutter", source: "Landing Page", status: "Đã đăng ký",
     date: "12/05/2026 08:50", phone: "0903 456 789", email: "thuha@gmail.com", assignee: "Tư vấn viên B",
-    campaign: "Landing Page mùa hè",
     nextFollowUpAt: null, // đã đăng ký, không cần follow-up nữa
     signals: {
       fitCourseDefined: true, fitTargetGroup: true, fitPriorKnowledge: true, fitCareerGoal: true, fitScheduleMatch: true,
@@ -226,7 +221,6 @@ export const leads = [
   {
     id: 5, name: "Võ Hoàng Nam", course: "Data Analyst", source: "Facebook", status: "Đang cân nhắc",
     date: "12/05/2026 08:12", phone: "0905 678 901", email: "hoangnam@gmail.com", assignee: "Tư vấn viên A",
-    campaign: "SEM Google – Data Analyst",
     nextFollowUpAt: daysFromNow(0), // đến hạn hôm nay
     facebook: "https://facebook.com/hoangnam.vo",
     signals: {
@@ -251,7 +245,6 @@ export const leads = [
   {
     id: 7, name: "Bùi Anh Tuấn", course: "Java Backend", source: "Landing Page", status: "Lead mới",
     date: "12/05/2026 07:40", phone: "0907 890 123", email: "anhtuan@gmail.com", assignee: "Tư vấn viên C",
-    campaign: "Tuyển sinh khóa Java Backend",
     nextFollowUpAt: null,
     signals: {
       fitCourseDefined: true,
@@ -274,7 +267,6 @@ export const leads = [
   {
     id: 9, name: "Hoàng Mai Linh", course: "Java Backend", source: "Facebook", status: "Đã liên hệ",
     date: "11/05/2026 18:40", phone: "0909 012 345", email: "mailinh@gmail.com", assignee: "Tư vấn viên A",
-    campaign: "Tuyển sinh khóa Java Backend",
     nextFollowUpAt: null,
     facebook: "https://facebook.com/mailinh.hoang",
     signals: {
@@ -287,7 +279,6 @@ export const leads = [
   {
     id: 10, name: "Phan Quốc An", course: "Data Analyst", source: "TikTok", status: "Đang cân nhắc",
     date: "11/05/2026 16:12", phone: "0910 123 456", email: "quocan@gmail.com", assignee: null, // chưa phân công
-    campaign: "SEM Google – Data Analyst",
     nextFollowUpAt: null,
     tiktok: "https://tiktok.com/@quocan.phan",
     signals: {
@@ -300,7 +291,6 @@ export const leads = [
   {
     id: 11, name: "Trịnh Hồng Nhung", course: "UI/UX Design", source: "Landing Page", status: "Đang tư vấn",
     date: "11/05/2026 14:30", phone: "0911 234 567", email: "hongnhung@gmail.com", assignee: "Tư vấn viên C",
-    campaign: "Landing Page mùa hè",
     nextFollowUpAt: daysFromNow(3), // chưa đến hạn
     signals: {
       fitCourseDefined: true, fitTargetGroup: true, fitCareerGoal: true,
@@ -357,105 +347,6 @@ export const careHistory = {
 // không còn hardcode theo id ở đây — đảm bảo luôn khớp với điểm số hiển thị.
 
 
-export const campaigns = [
-  {
-    id: 1,
-    name: "Tuyển sinh khóa Java Backend",
-    source: "Facebook Ads",
-    course: "Java Backend",
-    leads: 46,
-    hotLeads: 14,
-    deposits: 9,
-    registrations: 6,
-    status: "Đang chạy",
-    budget: "10.000.000",
-    start: "2026-05-01",
-    end: "2026-05-31",
-    utmSource: "facebook",
-    utmMedium: "cpc",
-    utmCampaign: "java-backend-t5",
-    utmContent: "video-ad-01",
-    utmTerm: "hoc-java-backend",
-  },
-  {
-    id: 2,
-    name: "SEM Google – Data Analyst",
-    source: "Google Ads",
-    course: "Data Analyst",
-    leads: 28,
-    hotLeads: 8,
-    deposits: 5,
-    registrations: 3,
-    status: "Đang chạy",
-    budget: "8.000.000",
-    start: "2026-05-05",
-    end: "2026-05-30",
-    utmSource: "google",
-    utmMedium: "cpc",
-    utmCampaign: "data-analyst-t5",
-    utmContent: "search-ad-a",
-    utmTerm: "khoa-hoc-data-analyst",
-  },
-  {
-    id: 3,
-    name: "TikTok Viral – ReactJS",
-    source: "TikTok Ads",
-    course: "ReactJS",
-    leads: 35,
-    hotLeads: 11,
-    deposits: 6,
-    registrations: 4,
-    status: "Đang chạy",
-    budget: "6.000.000",
-    start: "2026-05-10",
-    end: "2026-05-25",
-    utmSource: "tiktok",
-    utmMedium: "social",
-    utmCampaign: "reactjs-t5",
-    utmContent: "reel-01",
-    utmTerm: "",
-  },
-  {
-    id: 4,
-    name: "Landing Page mùa hè",
-    source: "Landing Page",
-    course: "UI/UX Design",
-    leads: 22,
-    hotLeads: 5,
-    deposits: 3,
-    registrations: 2,
-    status: "Kết thúc",
-    budget: "3.000.000",
-    start: "2026-04-01",
-    end: "2026-04-30",
-    utmSource: "landing-page",
-    utmMedium: "organic",
-    utmCampaign: "summer-2026",
-    utmContent: "",
-    utmTerm: "",
-  },
-];
-
-// Xu hướng lead theo ngày cho từng chiến dịch — dùng cho biểu đồ ở trang Campaign Details
-export const campaignTrends = {
-  1: [
-    { day: "01/05", value: 3 }, { day: "08/05", value: 6 }, { day: "15/05", value: 9 },
-    { day: "22/05", value: 14 }, { day: "29/05", value: 14 },
-  ],
-  2: [
-    { day: "05/05", value: 2 }, { day: "12/05", value: 5 }, { day: "19/05", value: 9 },
-    { day: "26/05", value: 12 },
-  ],
-  3: [
-    { day: "10/05", value: 4 }, { day: "15/05", value: 10 }, { day: "20/05", value: 18 },
-    { day: "25/05", value: 3 },
-  ],
-  4: [
-    { day: "01/04", value: 5 }, { day: "10/04", value: 8 }, { day: "20/04", value: 6 },
-    { day: "30/04", value: 3 },
-  ],
-};
-
 // Chương trình giảm giá — xem services/voucherService.js. minLeadStage dùng
 // đúng chuỗi trong leadStatusOrder để so sánh thứ tự giai đoạn lead.
 export const vouchers = [
@@ -463,11 +354,10 @@ export const vouchers = [
     id: 1,
     code: "JAVA30",
     name: "Ưu đãi khai giảng Java Backend",
-    description: "Giảm 30% học phí cho lead đăng ký từ chiến dịch Tuyển sinh khóa Java Backend.",
+    description: "Giảm 30% học phí cho lead đăng ký khóa Java Backend.",
     discountType: "PERCENT",
     discountValue: 30,
     courseId: "Java Backend",
-    campaignId: 1,
     startDate: "2026-05-01",
     endDate: "2026-06-30",
     usageLimit: 20,
@@ -484,7 +374,6 @@ export const vouchers = [
     discountType: "FIXED_AMOUNT",
     discountValue: 500000,
     courseId: null,
-    campaignId: null,
     startDate: "2026-05-01",
     endDate: "2026-08-31",
     usageLimit: null,
@@ -499,7 +388,7 @@ export const activityLogs = [
   { id: 1, user: "Tư vấn viên A", action: "Cập nhật trạng thái lead #1", time: "12/05/2026 10:30" },
   { id: 2, user: "Tư vấn viên B", action: "Thêm lead mới #9", time: "12/05/2026 09:45" },
   { id: 3, user: "Tư vấn viên A", action: "Gửi email cho lead #3", time: "12/05/2026 09:15" },
-  { id: 4, user: "Admin", action: "Tạo chiến dịch mới", time: "12/05/2026 08:50" },
+  { id: 4, user: "Admin", action: "Cập nhật cấu hình hệ thống", time: "12/05/2026 08:50" },
   { id: 5, user: "Tư vấn viên C", action: "Gọi điện cho lead #6", time: "12/05/2026 08:20" },
 ];
 
@@ -548,8 +437,8 @@ export const notifications = [
   {
     id: 4,
     type: "system",
-    title: "Chiến dịch \"TikTok Viral – ReactJS\" sắp kết thúc",
-    desc: "Còn 3 ngày trước khi chiến dịch kết thúc.",
+    title: "Voucher \"SUMMER500K\" sắp hết hạn",
+    desc: "Còn 3 ngày trước khi voucher hết hạn.",
     time: "Hôm qua",
     read: true,
     leadId: null,
@@ -568,9 +457,6 @@ export const notifications = [
 export const navItems = [
   { label: "Dashboard", path: "/", icon: "LayoutDashboard" },
   { label: "Leads", path: "/leads", icon: "Users" },
-  // TẠM ẨN — bỏ comment dòng dưới để hiện lại menu "Chiến dịch" (route/trang
-  // /campaigns vẫn còn nguyên, chỉ đang ẩn khỏi thanh điều hướng).
-  // { label: "Chiến dịch", path: "/campaigns", icon: "GitBranch" },
   { label: "Chương trình giảm giá", path: "/vouchers", icon: "Ticket" },
   { label: "Quản lý khóa học", path: "/courses", icon: "GraduationCap" },
   { label: "Lịch hẹn của tôi", path: "/appointments", icon: "CalendarClock" },

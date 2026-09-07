@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { AlertTriangle, X } from "lucide-react";
 
 /**
- * Popup xác nhận hành động không thể hoàn tác (xóa Lead/Campaign/User...).
+ * Popup xác nhận hành động không thể hoàn tác (xóa Lead/Voucher/User...).
  * Dùng: <ConfirmDialog open={...} title="..." message="..." onCancel={...} onConfirm={...} />
  */
 export default function ConfirmDialog({

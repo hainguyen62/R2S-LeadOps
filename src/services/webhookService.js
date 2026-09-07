@@ -4,10 +4,9 @@
 
    Backend thật (api-1.json) CHƯA có endpoint /webhooks/* nào, nên toàn bộ
    phần này chạy dưới dạng "webhook nội bộ" ở FE: lưu cấu hình + log vào
-   localStorage (giống cách campaignService.js đang xử lý resource Campaign
-   khi chưa có Back-end), và tái sử dụng leadService (createLead/
-   findDuplicateLead/addLeadActivity) để lead tạo ra đi đúng luồng chấm điểm/
-   chống trùng như lead nhập tay — không tạo 1 luồng dữ liệu riêng lẻ.
+   localStorage, và tái sử dụng leadService (createLead/findDuplicateLead/
+   addLeadActivity) để lead tạo ra đi đúng luồng chấm điểm/chống trùng như
+   lead nhập tay — không tạo 1 luồng dữ liệu riêng lẻ.
 
    Khi Back-end có endpoint POST /api/webhooks/google-form thật:
      - Google Apps Script sẽ gọi thẳng lên Back-end (không qua FE nữa).
@@ -82,7 +81,7 @@ export function clearWebhookEvents() {
 /**
  * Nhận payload từ Google Apps Script (trigger onFormSubmit của Google Form).
  * payload dự kiến (đặt tên cột trong Google Sheet trùng các key này):
- *   { fullName, phone, email, course, studyGoal, city, campaign, secretToken, formResponseId }
+ *   { fullName, phone, email, course, studyGoal, city, secretToken, formResponseId }
  *
  * Luồng xử lý đúng Mục XIII.1 + Module 3 (chống trùng):
  *   1. Xác thực secretToken.
@@ -157,7 +156,6 @@ export async function receiveGoogleFormWebhook(payload = {}) {
         source: "Google Form",
         phone: payload.phone,
         email: payload.email,
-        campaign: payload.campaign,
         studyGoal: payload.studyGoal,
         city: payload.city,
         note: "Lead tạo tự động từ Google Form qua webhook.",

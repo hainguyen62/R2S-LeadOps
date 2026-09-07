@@ -10,7 +10,6 @@ import { useToast } from "../components/ui/ToastProvider.jsx";
 import { statusStyle, classStyle, leadStatusOrder } from "../data/mockData.js";
 import { fetchLeadById, fetchLeadActivities, updateLeadStatus, assignLead, addLeadActivity, updateLead, fetchLeadScoreEvents } from "../services/leadService.js";
 import { fetchUsers } from "../services/settingsService.js";
-import { fetchCampaigns } from "../services/campaignService.js";
 import {
   fetchLeadAppointments,
   createAppointment,
@@ -100,11 +99,6 @@ export default function LeadDetail() {
   const [statusOpen, setStatusOpen] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
-  // ---- Chiến dịch nguồn của lead (Mục 6.5) ----
-  // lead.campaign chỉ lưu TÊN chiến dịch, nên cần tra cứu id tương ứng
-  // trong danh sách campaigns để có thể điều hướng sang trang chi tiết.
-  const [campaignMatch, setCampaignMatch] = useState(null);
-
   // ---- Sửa thông tin cá nhân của lead (họ tên/SĐT/email) ----
   const [editInfoOpen, setEditInfoOpen] = useState(false);
   const [editInfoForm, setEditInfoForm] = useState({ name: "", phone: "", email: "" });
@@ -177,28 +171,6 @@ export default function LeadDetail() {
       cancelled = true;
     };
   }, [id, salesView, user]);
-
-  // Tra cứu id chiến dịch theo tên (lead.campaign) để hiển thị link sang
-  // CampaignDetails — chỉ tải khi lead có gắn chiến dịch và user có quyền
-  // xem trang Campaign (Sales không có quyền accessCampaignsPage).
-  useEffect(() => {
-    let cancelled = false;
-    if (!lead?.campaign || !can(user, "accessCampaignsPage")) {
-      setCampaignMatch(null);
-      return;
-    }
-    fetchCampaigns()
-      .then((list) => {
-        if (cancelled) return;
-        setCampaignMatch(list.find((c) => c.name === lead.campaign) || null);
-      })
-      .catch(() => {
-        if (!cancelled) setCampaignMatch(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [lead?.campaign, user]);
 
   // GET /leads/{id}/appointments — chỉ có dữ liệu khi kết nối API thật (Mục 4.1)
   // Hook này phải được khai báo trước các nhánh return loading/error để thứ tự
@@ -625,21 +597,6 @@ export default function LeadDetail() {
                 <p className="font-semibold text-slate-900 truncate">{lead.name}</p>
                 <div className="mt-1"><Pill text={lead.status} map={statusStyle} /></div>
                 <p className="text-xs text-slate-500 mt-1 truncate">{lead.course} · {lead.source}</p>
-                {lead.campaign && (
-                  <p className="text-xs text-slate-500 mt-0.5 truncate">
-                    Chiến dịch:{" "}
-                    {campaignMatch ? (
-                      <button
-                        onClick={() => navigate(`/campaigns/${campaignMatch.id}`)}
-                        className="text-brand-600 hover:text-brand-700 hover:underline font-medium"
-                      >
-                        {lead.campaign}
-                      </button>
-                    ) : (
-                      <span className="text-slate-700 font-medium">{lead.campaign}</span>
-                    )}
-                  </p>
-                )}
               </div>
             </div>
 
