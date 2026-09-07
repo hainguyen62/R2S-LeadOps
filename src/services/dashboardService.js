@@ -1,6 +1,4 @@
-/* ============================================================
-   DASHBOARD SERVICE — khớp Mục X.5 (Dashboard) trong kế hoạch.
-   ============================================================ */
+/* DASHBOARD SERVICE — khớp Mục X.5 (Dashboard) trong kế hoạch. */
 
 import { apiFetch, USE_MOCK, mockDelay, ApiError } from "./apiClient.js";
 import {
@@ -21,13 +19,8 @@ function clone(obj) {
   return typeof structuredClone === "function" ? structuredClone(obj) : JSON.parse(JSON.stringify(obj));
 }
 
-// Lead "Không hợp lệ" (bị đánh dấu spam/fake hoặc tổng điểm về 0) KHÔNG được
-// đưa vào bất kỳ danh sách ưu tiên nào, theo đúng Mục VII.4 tài liệu BA
-// ("Không hợp lệ ... Không đưa vào danh sách ưu tiên"). fetchHotLeads đã tự
-// loại trừ (vì spam không bao giờ được xếp "Lead nóng"), nhưng
-// fetchUnassignedLeads/fetchFollowUpLeads/fetchChangedTodayLeads cần lọc rõ
-// vì các điều kiện lọc riêng của chúng (chưa phân công, đến hạn follow-up,
-// vừa đổi điểm) không tự loại trừ spam.
+// Lead "Không hợp lệ" (spam/fake, tổng điểm 0) không được vào danh sách ưu
+// tiên (Mục VII.4). fetchHotLeads tự loại trừ; 3 hàm còn lại cần lọc thêm.
 const isValidLead = (l) => classify(l.score, l) !== "Không hợp lệ";
 
 /** GET /dashboard/counter-lead — không nhận tham số range */
@@ -68,25 +61,10 @@ export async function fetchConversionFunnel() {
   return clone(funnel);
 }
 
-/* ------------------------------------------------------------------------
- * DASHBOARD THEO KHOẢNG THỜI GIAN (dropdown dùng chung ở Dashboard.jsx)
- * ------------------------------------------------------------------------
- * Áp dụng cho: "Lead theo ngày", "Nguồn lead", "Phễu chuyển đổi", "Phân
- * loại lead", và 3 thẻ KPI "Lead mới / Lead nóng / Đã đăng ký". KHÔNG áp
- * dụng cho "Tổng lead" (luôn là tổng toàn thời gian) và "Lead cần xử lý
- * ngay" (luôn là top ưu tiên hiện tại, không phụ thuộc khoảng thời gian).
- *
- * Vì bộ dữ liệu mẫu (`leads`) chỉ có 16 lead trải trong 2 ngày — đủ cho
- * trang Quản lý Lead nhưng không đủ để minh họa các mốc 7/15/30 ngày — nên
- * số liệu theo ngày ở đây được tổng hợp riêng bằng một hàm "giả ngẫu nhiên
- * nhưng ổn định" (cùng 1 ngày luôn ra cùng 1 giá trị mỗi lần tải lại), rồi
- * phân bổ theo đúng TỈ LỆ hiện có trong mockData (classification/sources/
- * funnel) để các con số giữa các khối luôn khớp nhau. Khi có Back-end
- * thật, chỉ cần thay thân hàm bằng 1 lệnh gọi API duy nhất nhận tham số
- * `range` (số ngày) — chữ ký hàm (nhận `days`, trả về đúng hình dạng dữ
- * liệu này) đã được thiết kế sẵn để khớp thẳng với endpoint thật.
- * ------------------------------------------------------------------------ */
-
+// Dropdown khoảng thời gian dùng chung ở Dashboard.jsx. Áp dụng cho "Lead
+// theo ngày", "Nguồn lead", "Phễu chuyển đổi", "Phân loại lead" và 3 thẻ KPI
+// (Lead mới/Lead nóng/Đã đăng ký). Không áp dụng cho "Tổng lead" và "Lead
+// cần xử lý ngay" (không phụ thuộc thời gian).
 export const DASHBOARD_RANGE_OPTIONS = [
   { value: 1, label: "1 ngày qua" },
   { value: 7, label: "7 ngày qua" },
@@ -95,22 +73,12 @@ export const DASHBOARD_RANGE_OPTIONS = [
   { value: "all", label: "Tất cả" },
 ];
 
-/* ------------------------------------------------------------------------
- * LỌC "LEAD THEO NGÀY" THEO KHÓA HỌC / TRẠNG THÁI (2 dropdown trên biểu đồ)
- * ------------------------------------------------------------------------
- * - DASHBOARD_COURSE_OPTIONS: rút từ chính dữ liệu lead hiện có (giống cách
- *   fetchLeadFilterOptions của leadService) để mỗi lựa chọn luôn có dữ liệu.
- * - DASHBOARD_STATUS_OPTIONS: dùng đúng luồng trạng thái chính thức
- *   (leadStatusOrder) thay vì hardcode, tránh lệch với các màn hình khác.
- * - fetchLeadsByDayRange: mô phỏng GET /api/dashboard/leads-by-day?range=
- *   {days}&course=&status=. Khi có Back-end thật, chỉ cần thay thân hàm bằng
- *   lệnh gọi API với các tham số trên — chữ ký đã khớp sẵn.
- * ------------------------------------------------------------------------ */
+// Bộ lọc khóa học/trạng thái cho biểu đồ "Lead theo ngày", rút từ dữ liệu
+// lead hiện có để mỗi lựa chọn luôn có dữ liệu.
 export const DASHBOARD_COURSE_OPTIONS = [...new Set(mockLeads.map((l) => l.course).filter(Boolean))].sort();
 export const DASHBOARD_STATUS_OPTIONS = leadStatusOrder;
 
-// Tỉ lệ lead trong mock khớp với bộ lọc khóa học/trạng thái (0..1). Không lọc
-// (null/"") thì trả 1 — biểu đồ giữ nguyên toàn bộ dữ liệu.
+// Tỉ lệ lead khớp bộ lọc khóa học/trạng thái (0..1). Không lọc thì trả 1.
 function filterShare({ course, status } = {}) {
   if (!course && !status) return 1;
   const total = mockLeads.length || 1;
@@ -120,12 +88,7 @@ function filterShare({ course, status } = {}) {
   return matched / total;
 }
 
-/**
- * GET /api/dashboard/leads-by-day?range={days}&course=&status= — chuỗi dữ liệu
- * cho biểu đồ "Lead theo ngày", đã lọc theo khóa học / trạng thái từ 2 dropdown
- * trên biểu đồ. Không lọc thì trả về cùng chuỗi cơ sở với fetchDashboardByRange
- * (đã nhân tỉ lệ 1:1) để số liệu lọc/tất cả luôn khớp nhau.
- */
+/** GET /api/dashboard/leads-by-day?range={days}&course=&status= */
 export async function fetchLeadsByDayRange(days, filters = {}) {
   if (!USE_MOCK) throw new ApiError('Backend chưa có API "leads-by-day" (kèm tham số range).', { status: 501 });
   await mockDelay(250);
@@ -171,18 +134,13 @@ function pctChange(curr, prev, compareLabel) {
   return `${pct >= 0 ? "+" : ""}${pct}% so với ${compareLabel}`;
 }
 
-/**
- * GET /api/dashboard/overview?range={days} — toàn bộ số liệu Dashboard
- * phụ thuộc khoảng thời gian (xem ghi chú phía trên). `days` có thể là số
- * (1/7/15/30) hoặc chuỗi "all" (Tất cả — không lọc theo thời gian).
- */
+/** GET /api/dashboard/overview?range={days} — days là số (1/7/15/30) hoặc "all" */
 export async function fetchDashboardByRange(days) {
   if (!USE_MOCK) throw new ApiError('Backend chưa hỗ trợ tham số "range" cho dashboard.', { status: 501 });
   await mockDelay(350);
 
-  // "Tất cả": dùng thẳng số liệu toàn thời gian có sẵn trong mockData
-  // (khớp với thẻ "Tổng lead"), không có "kỳ trước" nào để so sánh % nên
-  // không hiển thị mũi tên tăng/giảm — chỉ hiện dòng chú thích trung tính.
+  // "Tất cả": dùng số liệu toàn thời gian có sẵn, không có kỳ trước để so
+  // sánh % nên không hiện mũi tên tăng/giảm.
   if (days === "all") {
     const currentTotal = funnel[0].value;
     const funnelAll = funnel.map((f) => ({ name: f.name, fill: f.fill, value: f.value, pct: f.pct }));
@@ -194,9 +152,7 @@ export async function fetchDashboardByRange(days) {
       value: mockLeads.filter((l) => l.status === name).length,
     }));
 
-    // Biểu đồ "Lead theo ngày" chưa có lịch sử đầy đủ trong mock — hiển thị
-    // xu hướng 30 ngày gần nhất nhưng CO GIÃN lại để tổng khớp đúng với
-    // Tổng lead toàn thời gian (currentTotal), tránh lệch số với các khối khác.
+    // Biểu đồ 30 ngày gần nhất, co giãn để tổng khớp currentTotal.
     const rawSeries = buildDailySeries(30);
     const rawTotal = sum(rawSeries) || 1;
     const scale = currentTotal / rawTotal;
@@ -224,8 +180,8 @@ export async function fetchDashboardByRange(days) {
   prevEnd.setDate(prevEnd.getDate() - days);
   const prevTotal = sum(buildDailySeries(days, prevEnd));
 
-  // Tỉ lệ Nóng/Ấm/Lạnh lấy từ baseline mockData (36:128:84) để phân bổ lại
-  // theo tổng lead mới trong kỳ đã chọn.
+  // Tỉ lệ Nóng/Ấm/Lạnh và nguồn lấy từ baseline mockData, phân bổ lại theo
+  // tổng lead mới trong kỳ đã chọn.
   const classTotal = sum(classification);
   const classForRange = classification.map((c) => ({
     ...c,
@@ -234,17 +190,14 @@ export async function fetchDashboardByRange(days) {
   const hotRatio = classification.find((c) => c.name === "Nóng").value / classTotal;
   const hotPrevTotal = Math.round(prevTotal * hotRatio);
 
-  // Tỉ lệ nguồn lấy từ baseline mockData (Facebook/TikTok/Landing Page/Google Form).
   const sourceTotal = sum(sources);
   const sourcesForRange = sources.map((s) => ({
     ...s,
     value: Math.round((currentTotal * s.value) / sourceTotal),
   }));
 
-  // Phễu: `value` mỗi bậc được scale theo cùng tỉ lệ so với bậc đầu ("Lead
-  // mới" = tổng lead trong kỳ, luôn khớp với thẻ KPI "Lead mới" + tổng
-  // "Lead theo ngày"), còn `pct` tính LẠI theo bậc LIỀN TRƯỚC (Mục XII.3),
-  // không phải theo tổng ban đầu — xem utils/funnel.js.
+  // Phễu: value mỗi bậc scale theo tỉ lệ so với bậc đầu; pct tính lại theo
+  // bậc liền trước (Mục XII.3, xem utils/funnel.js), không theo tổng ban đầu.
   const funnelForRange = withStagePct(
     funnel.map((f) => {
       const ratio = f.value / funnel[0].value;
@@ -255,14 +208,10 @@ export async function fetchDashboardByRange(days) {
   const registeredRatio = funnel[funnel.length - 1].value / funnel[0].value;
   const registeredPrevTotal = Math.round(prevTotal * registeredRatio);
 
-  // "Đã đặt cọc" — bậc áp chót trong phễu, cùng cơ chế tính với "Đã đăng ký".
   const depositedTotal = funnelForRange[funnelForRange.length - 2].value;
   const depositedRatio = funnel[funnel.length - 2].value / funnel[0].value;
   const depositedPrevTotal = Math.round(prevTotal * depositedRatio);
 
-  // Tỉ lệ trạng thái lấy từ baseline mockData (đếm theo l.status hiện có),
-  // phân bổ lại theo tổng lead mới trong kỳ đã chọn — cùng cơ chế với
-  // classification/sources phía trên.
   const statusBaseline = leadStatusOrder.map((name) => ({
     name,
     value: mockLeads.filter((l) => l.status === name).length,
@@ -300,20 +249,15 @@ function toInitials(name) {
     .toUpperCase();
 }
 
-/** TopLeadResponse (backend) -> đúng field UI đang dùng ở HotLeadsPanel (name, initials, score...). */
+/** TopLeadResponse (backend) -> field UI đang dùng ở HotLeadsPanel */
 function mapTopLeadToUi(l) {
   return { id: l.leadId, name: l.fullName, initials: toInitials(l.fullName), score: l.totalScore, assignee: l.ownerName || undefined, course: "" };
 }
 
 /**
- * GET /dashboard/top-leads — "Lead nóng chưa liên hệ" (Mục XI.2 danh sách
- * hành động). Backend chỉ trả top N lead điểm cao nhất theo tổng điểm, KHÔNG
- * có tham số lọc theo trạng thái "chưa liên hệ" — nếu dùng thẳng kết quả này,
- * danh sách sẽ lẫn cả lead nóng ĐÃ liên hệ rồi, sai tiêu chí nghiệp vụ.
- * Giải pháp tạm (cho tới khi TTS2 bổ sung tham số lọc trạng thái ở backend):
- * lấy dư số lượng tối đa API cho phép (100), rồi tự lọc lại leadStage="NEW"
- * (đúng nghĩa "chưa liên hệ" — bước đầu tiên trong luồng trạng thái) ở phía
- * Front-end trước khi cắt còn đúng `limit` bản ghi cần hiển thị.
+ * GET /dashboard/top-leads — "Lead nóng chưa liên hệ" (Mục XI.2). Backend
+ * chỉ trả top N theo điểm, không lọc "chưa liên hệ", nên lấy dư (100) rồi
+ * tự lọc leadStage="NEW" ở Front-end trước khi cắt còn đúng `limit`.
  */
 export async function fetchHotLeads(limit = 5) {
   if (!USE_MOCK) {
@@ -334,9 +278,10 @@ export async function fetchHotLeads(limit = 5) {
 /** Backend chưa có endpoint unassigned-leads */
 export async function fetchUnassignedLeads(limit = 5) {
   if (!USE_MOCK) throw new ApiError('Backend chưa có API "unassigned-leads".', { status: 501 });
-  // Gọi fetchLeads() từ leadService để lấy toàn bộ leads (gốc + custom từ localStorage),
-  // thay vì mockLeads cứng từ mockData — để lead vừa tạo từ Consultation cũng được lấy.
-  const allLeads = await fetchLeads({ pageSize: 1000, page: 1 });
+  // fetchLeads() trả về object phân trang { items, total,... }, không phải
+  // mảng — phải lấy đúng `items` rồi mới .filter(), nếu không sẽ lỗi
+  // "allLeads.filter is not a function".
+  const { items: allLeads } = await fetchLeads({ pageSize: 1000, page: 1 });
   const rows = allLeads
     .filter((l) => !l.assignee && isValidLead(l))
     .sort((a, b) => b.score - a.score)
@@ -347,7 +292,7 @@ export async function fetchUnassignedLeads(limit = 5) {
 /** Backend chưa có endpoint followup-leads */
 export async function fetchFollowUpLeads(limit = 5) {
   if (!USE_MOCK) throw new ApiError('Backend chưa có API "followup-leads".', { status: 501 });
-  const allLeads = await fetchLeads({ pageSize: 1000, page: 1 });
+  const { items: allLeads } = await fetchLeads({ pageSize: 1000, page: 1 });
   const now = new Date();
   const rows = allLeads
     .filter((l) => l.nextFollowUpAt && new Date(l.nextFollowUpAt) <= now && isValidLead(l))
@@ -357,28 +302,21 @@ export async function fetchFollowUpLeads(limit = 5) {
 }
 
 /**
- * "Lead thay đổi điểm mạnh trong ngày" — mục thứ 4 trong Danh sách hành động
- * (Mục XI.2 tài liệu BA), còn thiếu so với 3 mục đã có (nóng chưa liên hệ,
- * chưa phân công, follow-up). Backend hiện KHÔNG có endpoint lịch sử điểm
- * (bảng lead_score_events, Mục IX kế hoạch gốc — đã báo cáo ở vấn đề #3 Mục
- * 5) nên Front-end không có cách nào biết CHÍNH XÁC lead nào vừa tăng/giảm
- * điểm hôm nay và tăng/giảm bao nhiêu — cần TTS2 bổ sung API mới xác định
- * đúng được. Báo lỗi rõ ràng cho trường hợp dùng API thật thay vì hiển thị
- * số liệu suy diễn sai lệch.
+ * "Lead thay đổi điểm mạnh trong ngày" (Mục XI.2, mục thứ 4). Backend chưa
+ * có endpoint lead_score_events nên không thể xác định chính xác lead nào
+ * thay đổi điểm hôm nay — báo lỗi rõ thay vì hiển thị số liệu suy diễn sai.
  */
 export async function fetchChangedTodayLeads(limit = 5) {
   if (!USE_MOCK) {
     throw new ApiError(
-      'Backend chưa có API lịch sử thay đổi điểm ("lead_score_events" theo Mục IX kế hoạch gốc) nên chưa thể xác định lead nào thay đổi điểm mạnh trong ngày. Cần trao đổi với TTS2 để bổ sung.',
+      'Backend chưa có API lịch sử thay đổi điểm ("lead_score_events" theo Mục IX kế hoạch gốc) nên chưa thể xác định lead nào thay đổi điểm mạnh trong ngày. Cần trao đổi với TTS2.',
       { status: 501, code: "NOT_IMPLEMENTED_BY_BACKEND" }
     );
   }
   await mockDelay(300);
 
-  // Dữ liệu demo có ngày cố định (không phải ngày thực tế hôm nay), nên lấy
-  // NGÀY GẦN NHẤT có lead được tính điểm trong tập mock làm mốc "hôm nay",
-  // rồi xếp hạng theo biến động điểm lớn nhất suy ra từ breakdown hiện tại
-  // (xem largestScoreSwing trong utils/leadScoring.js).
+  // Dữ liệu demo có ngày cố định, nên lấy ngày gần nhất có lead được tính
+  // điểm làm mốc "hôm nay", rồi xếp theo biến động điểm lớn nhất.
   const withDate = mockLeads
     .map((l) => ({ lead: l, refDate: parseVnDate(l.scoreUpdatedAt || l.date) }))
     .filter((x) => x.refDate);
@@ -398,22 +336,13 @@ export async function fetchChangedTodayLeads(limit = 5) {
 }
 
 /**
- * "Lead cần xử lý ngay" — gộp cả 4 mục trong Danh sách hành động (Mục XI.2
- * tài liệu BA) vào MỘT danh sách duy nhất, xếp theo đúng thứ tự ưu tiên:
- *   1. 🔴 Lead nóng (70–100đ) chưa liên hệ — ưu tiên cao nhất, quy định
- *      phải phân công trong 10 phút giờ làm việc.
- *   2. 🔴 Follow-up quá hạn — đã đến hẹn nhưng Sales chưa xử lý.
- *   3. 🟠 Lead mới chưa phân công — quy định phải có người phụ trách trong ngày.
- *   4. 🟡 Lead thay đổi điểm mạnh trong ngày — cần Sales xem lại.
- * Một lead có thể rơi vào nhiều nhóm cùng lúc (vd: vừa nóng vừa chưa phân
- * công) — chỉ giữ 1 dòng duy nhất, gắn theo lý do có mức ưu tiên CAO NHẤT
- * mà lead đó thỏa (urgentReason), để tránh liệt kê trùng lead trong danh sách.
+ * "Lead cần xử lý ngay" — gộp 4 mục trong Danh sách hành động (Mục XI.2)
+ * theo thứ tự ưu tiên: Lead nóng chưa liên hệ → Follow-up quá hạn → Lead
+ * mới chưa phân công → Lead thay đổi điểm mạnh. Một lead có thể thuộc
+ * nhiều nhóm — chỉ giữ 1 dòng, gắn lý do ưu tiên cao nhất (urgentReason).
  */
 export async function fetchUrgentLeads(limit = 5) {
   if (!USE_MOCK) {
-    // Cần đủ cả 3 API còn thiếu (unassigned-leads, followup-leads, và dữ
-    // liệu lead_score_events cho "changed") mới gộp đúng — xem ghi chú ở
-    // từng hàm fetch riêng lẻ bên trên/dưới. Báo lỗi rõ thay vì gộp thiếu.
     throw new ApiError(
       'Backend chưa có đủ API cần thiết (unassigned-leads, followup-leads, lead-score-events) để gộp "Lead cần xử lý ngay". Cần trao đổi với TTS2.',
       { status: 501, code: "NOT_IMPLEMENTED_BY_BACKEND" }
@@ -421,8 +350,7 @@ export async function fetchUrgentLeads(limit = 5) {
   }
   await mockDelay(300);
 
-  // Lấy dư từ mỗi nguồn (không giới hạn đúng `limit` ngay) để sau khi khử
-  // trùng lặp giữa các nhóm vẫn đủ dữ liệu lấp đầy `limit` dòng cuối cùng.
+  // Lấy dư từ mỗi nguồn để sau khi khử trùng lặp vẫn đủ lấp đầy `limit`.
   const POOL = Math.max(limit * 4, 20);
   const buckets = [
     { rows: await fetchHotLeads(POOL), reason: "hot" },
@@ -462,5 +390,5 @@ export async function fetchConversionTrend() {
 export async function fetchFollowUps() {
   if (!USE_MOCK) throw new ApiError('Backend chưa có API "follow-ups".', { status: 501 });
   await mockDelay(300);
-  return []; // Chưa có dữ liệu next_follow_up_at trong mock — Back-end bổ sung khi có bảng leads thật
+  return []; // Chưa có dữ liệu next_follow_up_at trong mock
 }
