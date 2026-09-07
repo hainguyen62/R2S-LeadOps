@@ -48,7 +48,6 @@ const tooltipStyle = {
 const formatVnd = (n) => `${n.toLocaleString("vi-VN")}đ`;
 
 export default function Reports() {
-  const navigate = useNavigate();
   const [leadsByDay, setLeadsByDay] = useState([]);
   const [sources, setSources] = useState([]);
   const [classification, setClassification] = useState([]);

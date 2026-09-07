@@ -116,7 +116,7 @@ export default function Integrations() {
         phone: `09${String(rand).padStart(8, "0")}`,
         email: `leadtest${rand}@gmail.com`,
         course: courseOptions[Math.floor(Math.random() * courseOptions.length)],
-        city: "Hà Nội",
+        city: "TP HCM",
       });
       toast.success(result.status === "ok" ? "Gửi thử thành công — đã tạo lead mới từ Google Form giả lập." : "Gửi thử thành công.");
       forceRefresh((n) => n + 1);
