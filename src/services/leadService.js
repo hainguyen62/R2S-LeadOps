@@ -14,6 +14,40 @@ import { scoreLead, classify, getScoreBreakdown, getScoreHistory, scoringGroups,
 import { normalizePhone, normalizeEmail } from "../utils/validators.js";
 import { formatVietnamDate, formatVietnamDateTime } from "../utils/datetime.js";
 
+/* ---- localStorage để persist custom leads qua refresh (mock mode) ---- */
+const CUSTOM_LEADS_KEY = "r2s_custom_leads";
+
+function loadCustomLeads() {
+  if (typeof localStorage === "undefined") return [];
+  try {
+    const stored = localStorage.getItem(CUSTOM_LEADS_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomLeads(leads) {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(CUSTOM_LEADS_KEY, JSON.stringify(leads));
+  } catch (e) {
+    console.warn("Không thể lưu leads vào localStorage:", e);
+  }
+}
+
+// Runtime: kết hợp mock leads gốc + custom leads từ localStorage
+const runtimeMockLeads = [...mockLeads, ...loadCustomLeads()];
+
+function persistCustomLeads() {
+  // Extract custom leads (những lead được tạo thêm, không nằm trong mockLeads gốc)
+  const customLeads = runtimeMockLeads.filter(
+    (l) => !mockLeads.find((orig) => matchId(orig.id, l.id))
+  );
+  saveCustomLeads(customLeads);
+}
+/* ---- Hết localStorage helpers ---- */
+
 /* ------------------------------------------------------------
    Enum thật của backend (theo OpenAPI spec TTS2 gửi) — dùng khi
    USE_MOCK=false, thay cho chuỗi tiếng Việt tự do bên mock.
@@ -46,7 +80,9 @@ function toCreateLeadRequest(payload) {
   return {
     fullName: payload.name?.trim(),
     phone: payload.phone?.trim(),
-    email: payload.email?.trim() || undefined,
+    // Chuẩn hóa email về chữ thường trước khi gửi backend thật (Mục IX.2) —
+    // trước đây chỉ .trim() nên nhánh USE_MOCK=false lưu sai hoa/thường.
+    email: payload.email?.trim() ? normalizeEmail(payload.email) : undefined,
     leadSource: payload.source ? toLeadSourceEnum(payload.source) : undefined,
     campaignCode: payload.campaign?.trim() || undefined,
     currentLevel: payload.currentLevel || undefined,
@@ -62,7 +98,7 @@ function toUpdateLeadRequest(payload) {
   return {
     fullName: payload.name?.trim() || undefined,
     phone: payload.phone?.trim() || undefined,
-    email: payload.email?.trim() || undefined,
+    email: payload.email?.trim() ? normalizeEmail(payload.email) : undefined,
     currentLevel: payload.currentLevel || undefined,
     careerGoal: payload.studyGoal?.trim() || undefined,
     painPoint: payload.note?.trim() || undefined,
@@ -257,7 +293,7 @@ export async function fetchLeads(params = {}) {
   } = params;
 
   const now = Date.now();
-  let rows = mockLeads.filter((l) => {
+  let rows = runtimeMockLeads.filter((l) => {
     // Mặc định (archivedOnly=false): chỉ lấy lead đang hoạt động, ẩn lead đã
     // lưu trữ. Khi archivedOnly=true (trang Lead lưu trữ): đảo ngược lại,
     // chỉ lấy đúng những lead đã lưu trữ.
@@ -341,7 +377,7 @@ function getSortValue(l, key) {
 export async function fetchLeadFilterOptions() {
   if (!USE_MOCK) return notSupportedByBackend("danh sách giá trị lọc (filter-options)");
   await mockDelay(100);
-  const active = mockLeads.filter((l) => !l.archived);
+  const active = runtimeMockLeads.filter((l) => !l.archived);
   const courses = [...new Set(active.map((l) => l.course).filter(Boolean))].sort();
   const sources = [...new Set(active.map((l) => l.source).filter(Boolean))].sort();
   const assignees = [...new Set(active.map((l) => l.assignee).filter(Boolean))].sort();
@@ -368,7 +404,7 @@ export async function importLeads(parsedLeads) {
   }
   await mockDelay(300);
   const toInsert = [...parsedLeads].reverse();
-  toInsert.forEach((l) => mockLeads.unshift(l));
+  toInsert.forEach((l) => runtimeMockLeads.unshift(l));
   return { imported: parsedLeads.length };
 }
 
@@ -376,7 +412,7 @@ export async function importLeads(parsedLeads) {
 export async function fetchLeadById(id) {
   if (!USE_MOCK) return mapLeadResponseToUi(await apiFetch(`/leads/${id}`));
   await mockDelay();
-  const lead = mockLeads.find((l) => matchId(l.id, id));
+  const lead = runtimeMockLeads.find((l) => matchId(l.id, id));
   if (!lead) throw new ApiError("Không tìm thấy lead.", { status: 404 });
   return clone(lead);
 }
@@ -397,7 +433,7 @@ export async function findDuplicateLead({ phone, email }) {
   await mockDelay(200);
   const phoneNorm = normalizePhone(phone);
   const emailNorm = normalizeEmail(email);
-  const found = mockLeads.find((l) => {
+  const found = runtimeMockLeads.find((l) => {
     const samePhone = phoneNorm && normalizePhone(l.phone) === phoneNorm;
     const sameEmail = emailNorm && normalizeEmail(l.email) === emailNorm;
     return samePhone || sameEmail;
@@ -450,8 +486,13 @@ export async function createLead(payload) {
     source: payload.source,
     status: "Lead mới",
     date: formatVietnamDate(new Date()),
-    phone: payload.phone?.trim() || "—",
-    email: payload.email?.trim() || "—",
+    // Chuẩn hóa số điện thoại & email trước khi lưu — khớp quy tắc dữ liệu
+    // Mục IX.2: "Email được chuyển về chữ thường trước khi lưu" / "Số điện
+    // thoại được chuẩn hóa". Trước đây chỉ .trim() nên "Test@EXAMPLE.COM"
+    // bị lưu nguyên dạng hoa/thường, phá vỡ cơ chế kiểm tra lead trùng
+    // (findDuplicateLead) vốn giả định email đã ở dạng chữ thường.
+    phone: payload.phone?.trim() ? normalizePhone(payload.phone) : "—",
+    email: payload.email?.trim() ? normalizeEmail(payload.email) : "—",
     assignee: payload.assignee || undefined, // rỗng/"Chưa phân công" -> chưa có người phụ trách
     campaign: payload.campaign?.trim() || undefined,
     school: payload.school?.trim() || undefined,
@@ -473,7 +514,8 @@ export async function createLead(payload) {
   newLead.cls = classify(newLead.score, newLead);
   newLead.scoreUpdatedAt = newLead.date;
 
-  mockLeads.unshift(newLead);
+  runtimeMockLeads.unshift(newLead);
+  persistCustomLeads(); // lưu custom leads vào localStorage
   return clone(newLead);
 }
 
@@ -481,12 +523,17 @@ export async function createLead(payload) {
 export async function updateLead(id, payload) {
   if (!USE_MOCK) return mapLeadResponseToUi(await apiFetch(`/leads/${id}`, { method: "PUT", body: toUpdateLeadRequest(payload) }));
   await mockDelay();
-  const idx = mockLeads.findIndex((l) => matchId(l.id, id));
+  const idx = runtimeMockLeads.findIndex((l) => matchId(l.id, id));
   if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
-  const prevScore = mockLeads[idx].score;
-  mockLeads[idx] = { ...mockLeads[idx], ...payload };
-  mockLeads[idx].score = scoreLead(mockLeads[idx]);
-  mockLeads[idx].cls = classify(mockLeads[idx].score, mockLeads[idx]);
+  const prevScore = runtimeMockLeads[idx].score;
+  // Chuẩn hóa email/SĐT nếu payload có sửa 2 trường này — cùng lý do như
+  // createLead ở trên, tránh lưu lẫn lộn hoa/thường khi sửa lead qua form.
+  const normalizedPayload = { ...payload };
+  if (payload.email !== undefined) normalizedPayload.email = payload.email?.trim() ? normalizeEmail(payload.email) : payload.email;
+  if (payload.phone !== undefined) normalizedPayload.phone = payload.phone?.trim() ? normalizePhone(payload.phone) : payload.phone;
+  runtimeMockLeads[idx] = { ...runtimeMockLeads[idx], ...normalizedPayload };
+  runtimeMockLeads[idx].score = scoreLead(runtimeMockLeads[idx]);
+  runtimeMockLeads[idx].cls = classify(runtimeMockLeads[idx].score, runtimeMockLeads[idx]);
   // BUG ĐÃ SỬA: trước đây hàm này tính lại điểm (score/cls) nhưng KHÔNG cập
   // nhật scoreUpdatedAt — nên mọi lần sửa tín hiệu chấm điểm qua form "Sửa
   // lead" đều không được dashboard "Lead thay đổi điểm mạnh trong ngày"
@@ -494,10 +541,11 @@ export async function updateLead(id, payload) {
   // thời gian dùng để lọc vẫn là ngày cũ (có thể là ngày mock cố định).
   // Chỉ cập nhật mốc thời gian khi điểm THỰC SỰ đổi, để tránh việc sửa các
   // trường không liên quan (SĐT, ghi chú...) cũng bị tính là "vừa đổi điểm".
-  if (mockLeads[idx].score !== prevScore) {
-    mockLeads[idx].scoreUpdatedAt = formatVietnamDateTime(new Date());
+  if (runtimeMockLeads[idx].score !== prevScore) {
+    runtimeMockLeads[idx].scoreUpdatedAt = formatVietnamDateTime(new Date());
   }
-  return clone(mockLeads[idx]);
+  persistCustomLeads(); // lưu thay đổi vào localStorage
+  return clone(runtimeMockLeads[idx]);
 }
 
 /** PATCH /api/leads/{id}/status — theo Mục V.4: cần lưu trạng thái cũ/mới + lý do
@@ -510,17 +558,18 @@ export async function updateLeadStatus(id, { newStatus, reason, note, actorName 
     return notSupportedByBackend("đổi trạng thái/giai đoạn lead (leadStage)");
   }
   await mockDelay();
-  const idx = mockLeads.findIndex((l) => matchId(l.id, id));
+  const idx = runtimeMockLeads.findIndex((l) => matchId(l.id, id));
   if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
-  const oldStatus = mockLeads[idx].status;
-  mockLeads[idx].status = newStatus;
+  const oldStatus = runtimeMockLeads[idx].status;
+  runtimeMockLeads[idx].status = newStatus;
   const noteText = note || reason;
   appendActivity(id, {
     text: `Chuyển trạng thái từ "${oldStatus}" sang "${newStatus}"${noteText ? ` — ${noteText}` : ""}`,
     channel: actorName || "Hệ thống",
     date: formatVietnamDateTime(new Date()),
   });
-  return clone(mockLeads[idx]);
+  persistCustomLeads(); // lưu thay đổi vào localStorage
+  return clone(runtimeMockLeads[idx]);
 }
 
 /** PATCH /api/leads/{id}/assignment — phân công / chuyển người phụ trách
@@ -538,16 +587,17 @@ export async function assignLead(id, { assignee, ownerId, reason, actorName } = 
     return mapLeadResponseToUi(await apiFetch(`/leads/${id}/owner`, { method: "PATCH", body: { ownerId: Number(targetOwnerId) } }));
   }
   await mockDelay();
-  const idx = mockLeads.findIndex((l) => matchId(l.id, id));
+  const idx = runtimeMockLeads.findIndex((l) => matchId(l.id, id));
   if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
-  const oldAssignee = mockLeads[idx].assignee;
-  mockLeads[idx].assignee = assignee;
+  const oldAssignee = runtimeMockLeads[idx].assignee;
+  runtimeMockLeads[idx].assignee = assignee;
   appendActivity(id, {
     text: `Chuyển phụ trách từ "${oldAssignee || "Chưa phân công"}" sang "${assignee}"${reason ? ` — Lý do: ${reason}` : ""}`,
     channel: actorName || "Hệ thống",
     date: formatVietnamDateTime(new Date()),
   });
-  return clone(mockLeads[idx]);
+  persistCustomLeads(); // lưu thay đổi vào localStorage
+  return clone(runtimeMockLeads[idx]);
 }
 
 /** POST /api/leads/{id}/archive — lưu trữ lead (không xóa cứng, theo Mục IX.2) */
@@ -560,29 +610,32 @@ export async function archiveLead(id) {
     return mapLeadResponseToUi(await apiFetch(`/leads/${id}`, { method: "PUT", body: { doNotContact: true } }));
   }
   await mockDelay();
-  const idx = mockLeads.findIndex((l) => matchId(l.id, id));
+  const idx = runtimeMockLeads.findIndex((l) => matchId(l.id, id));
   if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
-  mockLeads[idx].archived = true;
-  return clone(mockLeads[idx]);
+  runtimeMockLeads[idx].archived = true;
+  persistCustomLeads(); // lưu thay đổi vào localStorage
+  return clone(runtimeMockLeads[idx]);
 }
 
 /** POST /api/leads/{id}/unarchive — khôi phục lead đã lưu trữ về danh sách hoạt động */
 export async function unarchiveLead(id) {
   if (!USE_MOCK) return mapLeadResponseToUi(await apiFetch(`/leads/${id}`, { method: "PUT", body: { doNotContact: false } }));
   await mockDelay();
-  const idx = mockLeads.findIndex((l) => matchId(l.id, id));
+  const idx = runtimeMockLeads.findIndex((l) => matchId(l.id, id));
   if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
-  mockLeads[idx].archived = false;
-  return clone(mockLeads[idx]);
+  runtimeMockLeads[idx].archived = false;
+  persistCustomLeads(); // lưu thay đổi vào localStorage
+  return clone(runtimeMockLeads[idx]);
 }
 
 /** Xóa lead — chỉ dùng cho demo/dữ liệu thử nghiệm nội bộ. MVP không cho phép xóa cứng thật. */
 export async function deleteLead(id) {
   if (!USE_MOCK) return notSupportedByBackend("xóa lead");
   await mockDelay();
-  const idx = mockLeads.findIndex((l) => matchId(l.id, id));
+  const idx = runtimeMockLeads.findIndex((l) => matchId(l.id, id));
   if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
-  const [removed] = mockLeads.splice(idx, 1);
+  const [removed] = runtimeMockLeads.splice(idx, 1);
+  persistCustomLeads(); // lưu thay đổi vào localStorage
   return clone(removed);
 }
 
@@ -595,7 +648,7 @@ export async function deleteLead(id) {
 export async function fetchAllActivities() {
   if (!USE_MOCK) return notSupportedByBackend("lịch sử chăm sóc gộp tất cả lead (chỉ có API theo từng lead: GET /leads/{id}/activities)");
   await mockDelay(350);
-  const rows = mockLeads.flatMap((l) =>
+  const rows = runtimeMockLeads.flatMap((l) =>
     (mockCareHistory[l.id] || []).map((h) => ({ ...h, leadId: l.id, leadName: l.name, initials: l.initials, assignee: l.assignee }))
   );
   rows.sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -636,8 +689,8 @@ function appendActivity(id, activity) {
   mockCareHistory[id].push(entry);
 
   // Mục VII.5: hệ thống tính lại điểm khi lead có hành động chăm sóc mới.
-  const idx = mockLeads.findIndex((l) => matchId(l.id, id));
-  if (idx !== -1) mockLeads[idx].scoreUpdatedAt = entry.date;
+  const idx = runtimeMockLeads.findIndex((l) => matchId(l.id, id));
+  if (idx !== -1) runtimeMockLeads[idx].scoreUpdatedAt = entry.date;
 
   return clone(entry);
 }
@@ -651,7 +704,7 @@ export async function fetchLeadScore(id) {
     return { score: lead.totalScore, breakdown: null }; // backend không trả breakdown chi tiết từng tiêu chí như groupA-E
   }
   await mockDelay(150);
-  const lead = mockLeads.find((l) => matchId(l.id, id));
+  const lead = runtimeMockLeads.find((l) => matchId(l.id, id));
   if (!lead) throw new ApiError("Không tìm thấy lead.", { status: 404 });
   return { score: lead.score, cls: lead.cls, breakdown: getScoreBreakdown(lead) };
 }
@@ -659,12 +712,12 @@ export async function fetchLeadScore(id) {
 export async function recalculateLeadScore(id) {
   if (!USE_MOCK) return notSupportedByBackend("tính lại điểm thủ công (backend tự tính điểm khi có hoạt động mới, không có endpoint kích hoạt lại)");
   await mockDelay();
-  const idx = mockLeads.findIndex((l) => matchId(l.id, id));
+  const idx = runtimeMockLeads.findIndex((l) => matchId(l.id, id));
   if (idx === -1) throw new ApiError("Không tìm thấy lead.", { status: 404 });
-  mockLeads[idx].score = scoreLead(mockLeads[idx]);
-  mockLeads[idx].cls = classify(mockLeads[idx].score, mockLeads[idx]);
-  mockLeads[idx].scoreUpdatedAt = formatVietnamDateTime(new Date());
-  return { score: mockLeads[idx].score, cls: mockLeads[idx].cls, breakdown: getScoreBreakdown(mockLeads[idx]) };
+  runtimeMockLeads[idx].score = scoreLead(runtimeMockLeads[idx]);
+  runtimeMockLeads[idx].cls = classify(runtimeMockLeads[idx].score, runtimeMockLeads[idx]);
+  runtimeMockLeads[idx].scoreUpdatedAt = formatVietnamDateTime(new Date());
+  return { score: runtimeMockLeads[idx].score, cls: runtimeMockLeads[idx].cls, breakdown: getScoreBreakdown(runtimeMockLeads[idx]) };
 }
 
 /**
@@ -674,7 +727,7 @@ export async function recalculateLeadScore(id) {
 export async function fetchLeadScoreEvents(id) {
   if (!USE_MOCK) return notSupportedByBackend("lịch sử thay đổi điểm (lead_score_events)");
   await mockDelay(150);
-  const lead = mockLeads.find((l) => matchId(l.id, id));
+  const lead = runtimeMockLeads.find((l) => matchId(l.id, id));
   if (!lead) throw new ApiError("Không tìm thấy lead.", { status: 404 });
   return clone(getScoreHistory(lead));
 }

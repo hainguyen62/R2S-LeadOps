@@ -171,7 +171,7 @@ function LeadRow({ lead: l, mode, selectedId, onSelect }) {
 // (không dừng lại ở `limit` dòng như panel), thay vì điều hướng sang trang
 // Quản lý Lead chung chung (mất hết ngữ cảnh đang xem lead loại gì). Vẫn có
 // link phụ để mở trang Quản lý Lead cho ai cần công cụ lọc/sắp xếp đầy đủ.
-function ViewAllModal({ mode, onClose, onSelect, selectedId, onOpenLeadsPage }) {
+function ViewAllModal({ mode, onClose, onSelect, selectedId, onOpenLeadsPage, refreshKey = 0 }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -197,7 +197,7 @@ function ViewAllModal({ mode, onClose, onSelect, selectedId, onOpenLeadsPage }) 
     return () => {
       cancelled = true;
     };
-  }, [mode]);
+  }, [mode, refreshKey]);
 
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
@@ -278,7 +278,7 @@ function ViewAllModal({ mode, onClose, onSelect, selectedId, onOpenLeadsPage }) 
   );
 }
 
-export default function HotLeadsPanel({ selectedId, onSelect, onViewAll, limit = 5 }) {
+export default function HotLeadsPanel({ selectedId, onSelect, onViewAll, limit = 5, refreshKey = 0 }) {
   const [mode, setMode] = useState("urgent");
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -287,6 +287,8 @@ export default function HotLeadsPanel({ selectedId, onSelect, onViewAll, limit =
 
   // GET /api/dashboard/hot-leads | /unassigned-leads | /followup-leads | ...
   // xem services/dashboardService.js — mỗi mode gọi 1 endpoint/hàm riêng.
+  // `refreshKey` đổi (vd. sau khi phân công lead ở popup Chi tiết) ->
+  // load lại đúng danh sách đang xem, không cần người dùng tự F5 trang.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -307,7 +309,7 @@ export default function HotLeadsPanel({ selectedId, onSelect, onViewAll, limit =
     return () => {
       cancelled = true;
     };
-  }, [mode, limit]);
+  }, [mode, limit, refreshKey]);
 
   return (
     <ChartCard
@@ -370,6 +372,7 @@ export default function HotLeadsPanel({ selectedId, onSelect, onViewAll, limit =
             setShowAllModal(false);
             onViewAll?.();
           }}
+          refreshKey={refreshKey}
         />
       )}
     </ChartCard>

@@ -12,6 +12,7 @@ import {
   leads as mockLeads,
   leadStatusOrder,
 } from "../data/mockData.js";
+import { fetchLeads } from "./leadService.js";
 import { priorityTier, classify, parseVnDate, largestScoreSwing } from "../utils/leadScoring.js";
 import { getVietnamDateKey, vietnamDateToDate } from "../utils/datetime.js";
 import { withStagePct } from "../utils/funnel.js";
@@ -333,8 +334,10 @@ export async function fetchHotLeads(limit = 5) {
 /** Backend chưa có endpoint unassigned-leads */
 export async function fetchUnassignedLeads(limit = 5) {
   if (!USE_MOCK) throw new ApiError('Backend chưa có API "unassigned-leads".', { status: 501 });
-  await mockDelay(300);
-  const rows = [...mockLeads]
+  // Gọi fetchLeads() từ leadService để lấy toàn bộ leads (gốc + custom từ localStorage),
+  // thay vì mockLeads cứng từ mockData — để lead vừa tạo từ Consultation cũng được lấy.
+  const allLeads = await fetchLeads({ pageSize: 1000, page: 1 });
+  const rows = allLeads
     .filter((l) => !l.assignee && isValidLead(l))
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
@@ -344,9 +347,9 @@ export async function fetchUnassignedLeads(limit = 5) {
 /** Backend chưa có endpoint followup-leads */
 export async function fetchFollowUpLeads(limit = 5) {
   if (!USE_MOCK) throw new ApiError('Backend chưa có API "followup-leads".', { status: 501 });
-  await mockDelay(300);
+  const allLeads = await fetchLeads({ pageSize: 1000, page: 1 });
   const now = new Date();
-  const rows = [...mockLeads]
+  const rows = allLeads
     .filter((l) => l.nextFollowUpAt && new Date(l.nextFollowUpAt) <= now && isValidLead(l))
     .sort((a, b) => new Date(a.nextFollowUpAt) - new Date(b.nextFollowUpAt))
     .slice(0, limit);

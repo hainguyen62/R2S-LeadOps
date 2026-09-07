@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Flame, Droplet, UserCheck, ChevronDown, Check, AlertCircle, Users, X, Loader2, CalendarClock, PlusCircle, Clock, History as HistoryIcon, Ticket, Percent, Banknote } from "lucide-react";
+import { ArrowLeft, Flame, Droplet, UserCheck, ChevronDown, Check, AlertCircle, Users, X, Loader2, CalendarClock, PlusCircle, Clock, History as HistoryIcon, Ticket, Percent, Banknote, Pencil } from "lucide-react";
 import Pill from "../components/ui/Pill.jsx";
 import Avatar from "../components/ui/Avatar.jsx";
 import ContactButtons from "../components/ui/ContactButtons.jsx";
@@ -25,6 +25,7 @@ import { priorityTier, getScoreBreakdown, scoreLead, scoringGroups, deductionGro
 import { useAuth } from "../context/AuthContext.jsx";
 import { isSales, isAdmin, can } from "../utils/permissions.js";
 import { formatVietnamDateTime, vietnamDateTimeToIso } from "../utils/datetime.js";
+import { isValidEmail, isValidPhone } from "../utils/validators.js";
 
 // Loại hoạt động chăm sóc (Module 4 - Mục VI kế hoạch)
 const activityTypes = [
@@ -103,6 +104,12 @@ export default function LeadDetail() {
   // lead.campaign chỉ lưu TÊN chiến dịch, nên cần tra cứu id tương ứng
   // trong danh sách campaigns để có thể điều hướng sang trang chi tiết.
   const [campaignMatch, setCampaignMatch] = useState(null);
+
+  // ---- Sửa thông tin cá nhân của lead (họ tên/SĐT/email) ----
+  const [editInfoOpen, setEditInfoOpen] = useState(false);
+  const [editInfoForm, setEditInfoForm] = useState({ name: "", phone: "", email: "" });
+  const [editInfoErrors, setEditInfoErrors] = useState({});
+  const [savingInfo, setSavingInfo] = useState(false);
 
   // ---- Phân công lead (Module 5) ----
   const [assignOpen, setAssignOpen] = useState(false);
@@ -406,6 +413,53 @@ export default function LeadDetail() {
     }
   };
 
+  // Mở form sửa thông tin cá nhân — nạp lại từ lead hiện tại mỗi lần mở,
+  // tránh giữ state cũ từ lần chỉnh trước đó chưa lưu (cùng cách làm với
+  // openScoreForm() ở trên).
+  const openEditInfoModal = () => {
+    setEditInfoForm({ name: lead.name || "", phone: lead.phone || "", email: lead.email || "" });
+    setEditInfoErrors({});
+    setEditInfoOpen(true);
+  };
+
+  // PUT /api/leads/{id} — sửa họ tên/SĐT/email của lead (Module 2). Theo
+  // đúng UpdateLeadRequest (toUpdateLeadRequest ở leadService.js), Backend
+  // chỉ nhận fullName/phone/email/... — không có field khóa học/nguồn nên
+  // form này chỉ sửa 3 trường "thông tin cá nhân" đúng như UI hiển thị ở
+  // khối "Thông tin liên hệ".
+  const handleSaveInfo = async (e) => {
+    e.preventDefault();
+    const errors = {};
+    if (!editInfoForm.name.trim()) errors.name = "Vui lòng nhập họ và tên.";
+    const hasPhone = !!editInfoForm.phone.trim();
+    const hasEmail = !!editInfoForm.email.trim();
+    if (!hasPhone && !hasEmail) {
+      errors.phone = "Vui lòng nhập số điện thoại hoặc email.";
+      errors.email = "Vui lòng nhập số điện thoại hoặc email.";
+    } else {
+      if (hasPhone && !isValidPhone(editInfoForm.phone)) errors.phone = "Số điện thoại không hợp lệ (vd: 0901234567).";
+      if (hasEmail && !isValidEmail(editInfoForm.email)) errors.email = "Email không đúng định dạng.";
+    }
+    setEditInfoErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    setSavingInfo(true);
+    try {
+      await updateLead(lead.id, {
+        name: editInfoForm.name.trim(),
+        phone: editInfoForm.phone.trim(),
+        email: editInfoForm.email.trim(),
+      });
+      await refreshLead();
+      toast.success("Đã lưu thông tin cá nhân của lead.");
+      setEditInfoOpen(false);
+    } catch (err) {
+      toast.error(err.message || "Lưu thông tin thất bại.");
+    } finally {
+      setSavingInfo(false);
+    }
+  };
+
   const openAssignModal = async () => {
     setAssignForm({ assignee: "", reason: "" });
     setAssignOpen(true);
@@ -590,15 +644,26 @@ export default function LeadDetail() {
             </div>
 
             <div className="border-t border-slate-100 pt-3">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Thông tin liên hệ</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Thông tin liên hệ</p>
+                {(can(user, "editLeadCare") || isAdmin(user)) && (
+                  <button
+                    onClick={openEditInfoModal}
+                    title="Sửa thông tin cá nhân"
+                    className="text-brand-600 hover:text-brand-700 shrink-0"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                )}
+              </div>
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between gap-3">
                   <span className="text-slate-500">SĐT</span>
-                  <span className="text-slate-800">{lead.phone}</span>
+                  <span className="text-slate-800">{lead.phone || "—"}</span>
                 </div>
                 <div className="flex justify-between gap-3">
                   <span className="text-slate-500">Email</span>
-                  <span className="text-slate-800 text-right truncate">{lead.email}</span>
+                  <span className="text-slate-800 text-right truncate">{lead.email || "—"}</span>
                 </div>
                 <div className="flex justify-between gap-3 items-center">
                   <span className="text-slate-500">Người phụ trách</span>
@@ -1093,6 +1158,73 @@ export default function LeadDetail() {
                 <button type="button" onClick={() => setApptAction(null)} className="px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-800">Đóng</button>
                 <button type="submit" disabled={apptActionSaving} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-60 flex items-center gap-2">
                   {apptActionSaving && <Loader2 size={14} className="animate-spin" />} Xác nhận
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ---- Modal: Sửa thông tin cá nhân của lead (Module 2) ---- */}
+      {editInfoOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-sm shadow-elevated">
+            <div className="flex items-center justify-between px-6 pt-6 pb-2">
+              <h3 className="font-semibold text-slate-900">Sửa thông tin cá nhân</h3>
+              <button onClick={() => setEditInfoOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleSaveInfo} className="px-6 pb-6 space-y-3">
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Họ và tên *</label>
+                <input
+                  value={editInfoForm.name}
+                  onChange={(e) => setEditInfoForm({ ...editInfoForm, name: e.target.value })}
+                  className={`w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+                    editInfoErrors.name ? "border-red-300" : "border-slate-200"
+                  }`}
+                />
+                {editInfoErrors.name && <p className="text-[11px] text-red-600 mt-1">{editInfoErrors.name}</p>}
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Số điện thoại</label>
+                <input
+                  value={editInfoForm.phone}
+                  onChange={(e) => setEditInfoForm({ ...editInfoForm, phone: e.target.value })}
+                  placeholder="VD: 0901234567"
+                  className={`w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+                    editInfoErrors.phone ? "border-red-300" : "border-slate-200"
+                  }`}
+                />
+                {editInfoErrors.phone && <p className="text-[11px] text-red-600 mt-1">{editInfoErrors.phone}</p>}
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Email</label>
+                <input
+                  value={editInfoForm.email}
+                  onChange={(e) => setEditInfoForm({ ...editInfoForm, email: e.target.value })}
+                  className={`w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+                    editInfoErrors.email ? "border-red-300" : "border-slate-200"
+                  }`}
+                />
+                {editInfoErrors.email && <p className="text-[11px] text-red-600 mt-1">{editInfoErrors.email}</p>}
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditInfoOpen(false)}
+                  className="flex-1 border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingInfo}
+                  className="flex-1 bg-brand-600 hover:bg-brand-500 rounded-lg py-2 text-sm text-white disabled:opacity-60 inline-flex items-center justify-center gap-1.5"
+                >
+                  {savingInfo && <Loader2 size={14} className="animate-spin" />}
+                  {savingInfo ? "Đang lưu..." : "Lưu thay đổi"}
                 </button>
               </div>
             </form>

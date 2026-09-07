@@ -649,6 +649,9 @@ export default function Settings() {
               : `Mở khóa tài khoản "${lockTarget.user.name}"? Người dùng sẽ có thể đăng nhập lại bình thường.`
             : ""
         }
+        confirmLabel="Xác nhận"
+        danger={lockTarget?.action === "lock"}
+        irreversible={false}
         onCancel={() => setLockTarget(null)}
         onConfirm={confirmLockToggle}
         loading={lockingUser}

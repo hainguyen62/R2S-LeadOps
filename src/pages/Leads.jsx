@@ -82,8 +82,7 @@ export default function Leads() {
   const [advFilters, setAdvFilters] = useState({
     dateFrom: "", dateTo: "", scoreMin: "", scoreMax: "", overdueOnly: false,
     course: "Tất cả", source: "Tất cả", assignee: "Tất cả", campaign: "Tất cả",
-  });
-  const [advFiltersDraft, setAdvFiltersDraft] = useState(advFilters);
+  });  const [advFiltersDraft, setAdvFiltersDraft] = useState(advFilters);
   const [filterOptions, setFilterOptions] = useState({ courses: [], sources: [], assignees: [], campaigns: [] });
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState(null);
@@ -431,24 +430,6 @@ export default function Leads() {
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value); resetPage(); }}
-            className="flex-1 min-w-[130px] bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500"
-          >
-            {statuses.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-          <select
-            value={classFilter}
-            onChange={(e) => { setClassFilter(e.target.value); resetPage(); }}
-            className="flex-1 min-w-[130px] bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500"
-          >
-            {classes.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
           <button
             onClick={() => { setAdvFiltersDraft(advFilters); setShowAdvancedFilters((v) => !v); }}
             className={`flex items-center justify-center gap-1.5 text-xs border rounded-lg px-3 py-2 shrink-0 whitespace-nowrap ${
@@ -457,7 +438,8 @@ export default function Leads() {
           >
             <ListFilter size={14} /> Bộ lọc
             {(advFilters.dateFrom || advFilters.dateTo || advFilters.scoreMin || advFilters.scoreMax || advFilters.overdueOnly ||
-              advFilters.course !== "Tất cả" || advFilters.source !== "Tất cả" || advFilters.assignee !== "Tất cả" || advFilters.campaign !== "Tất cả") && (
+              advFilters.course !== "Tất cả" || advFilters.source !== "Tất cả" || advFilters.assignee !== "Tất cả" || advFilters.campaign !== "Tất cả" ||
+              statusFilter !== "Tất cả" || classFilter !== "Tất cả") && (
               <span className="w-1.5 h-1.5 rounded-full bg-brand-600" />
             )}
           </button>
@@ -522,6 +504,34 @@ export default function Leads() {
           </div>
           <div className="flex flex-wrap items-end gap-3">
             <div>
+              <label className="text-xs text-slate-500 block mb-1">Trạng thái</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => { setStatusFilter(e.target.value); resetPage(); }}
+                title="Lọc theo trạng thái"
+                aria-label="Lọc theo trạng thái"
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"
+              >
+                {statuses.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Phân loại</label>
+              <select
+                value={classFilter}
+                onChange={(e) => { setClassFilter(e.target.value); resetPage(); }}
+                title="Lọc theo phân loại"
+                aria-label="Lọc theo phân loại"
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"
+              >
+                {classes.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className="text-xs text-slate-500 block mb-1">Khóa học</label>
               <select
                 value={advFiltersDraft.course}
@@ -585,6 +595,10 @@ export default function Leads() {
                 };
                 setAdvFiltersDraft(cleared);
                 setAdvFilters(cleared);
+                // Xóa luôn bộ lọc Trạng thái/Phân loại — trước đây nút này chỉ
+                // reset các bộ lọc nâng cao, bỏ sót 2 mục Trạng thái/Phân loại.
+                setStatusFilter("Tất cả");
+                setClassFilter("Tất cả");
                 resetPage();
               }}
               className="text-xs text-slate-500 hover:text-slate-700 mt-2"

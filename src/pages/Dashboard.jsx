@@ -43,6 +43,11 @@ export default function Dashboard() {
   const [selectedLead, setSelectedLead] = useState(null);
   const [leadDrill, setLeadDrill] = useState(null); // { title, filters }
 
+  // Tăng lên mỗi khi 1 lead được phân công từ popup "Chi tiết lead" (vd. lead
+  // đang ở mục "Lead mới chưa phân công" vừa được gán cho ai đó) — để
+  // HotLeadsPanel tự load lại đúng danh sách đang xem, không cần F5 trang.
+  const [hotLeadsRefreshTick, setHotLeadsRefreshTick] = useState(0);
+
   // Thẻ "Tổng lead" — không phụ thuộc khoảng thời gian, chỉ tải 1 lần.
   const [totalLeadStat, setTotalLeadStat] = useState(null);
   const [loadingTotal, setLoadingTotal] = useState(true);
@@ -262,11 +267,17 @@ export default function Dashboard() {
           selectedId={selectedId}
           onSelect={(id) => setSelectedId((cur) => (cur === id ? null : id))}
           onViewAll={() => navigate("/leads")}
+          refreshKey={hotLeadsRefreshTick}
         />
       </div>
 
       {/* Click 1 lead -> popup chi tiết (không chiếm không gian cố định) */}
-      <LeadDetailModal lead={selectedLead} onClose={() => setSelectedId(null)} onRefresh={refreshSelectedLead} />
+      <LeadDetailModal
+        lead={selectedLead}
+        onClose={() => setSelectedId(null)}
+        onRefresh={refreshSelectedLead}
+        onAssigned={() => setHotLeadsRefreshTick((t) => t + 1)}
+      />
 
       {/* Click KPI / nguồn / trạng thái -> danh sách lead tương ứng */}
       {leadDrill && (

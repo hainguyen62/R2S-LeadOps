@@ -6,6 +6,7 @@ import { SkeletonBlock } from "../components/ui/Skeleton.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 import { fetchProfile, updateProfile } from "../services/settingsService.js";
 import { changePassword } from "../services/authService.js";
+import { useAuth } from "../context/AuthContext.jsx";
 
 const roleStyle = {
   Administrator: "bg-red-50 text-red-800",
@@ -15,6 +16,9 @@ const roleStyle = {
 };
 
 export default function Profile() {
+  // Tài khoản ĐANG đăng nhập — dùng để tải đúng hồ sơ của người đó (không
+  // phải hồ sơ tĩnh hard-code), xem ghi chú ở services/settingsService.js.
+  const authUser = useAuth();
   const [tab, setTab] = useState("info");
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -29,7 +33,8 @@ export default function Profile() {
   // GET /api/auth/me (hồ sơ chi tiết) — xem services/settingsService.js
   useEffect(() => {
     let cancelled = false;
-    fetchProfile()
+    setLoading(true);
+    fetchProfile(authUser?.id)
       .then((data) => {
         if (cancelled) return;
         setProfile(data);
@@ -44,7 +49,7 @@ export default function Profile() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authUser?.id]);
 
   if (loading) return <SkeletonBlock className="h-[400px] rounded-xl" />;
   if (error) return <EmptyState icon={AlertCircle} title="Không thể tải hồ sơ" description={error} />;
@@ -62,7 +67,7 @@ export default function Profile() {
     e.preventDefault();
     setSavingInfo(true);
     try {
-      const updated = await updateProfile(form);
+      const updated = await updateProfile(form, authUser?.id);
       setProfile(updated);
       setSavedMsg("Đã lưu thông tin cá nhân.");
       setTimeout(() => setSavedMsg(""), 2500);

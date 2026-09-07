@@ -4,9 +4,10 @@
    ============================================================ */
 
 import { apiFetch, USE_MOCK, mockDelay, ApiError, unwrapPage, toBackendPaging } from "./apiClient.js";
-import { users as mockUsers, activityLogs as mockActivityLogs, currentUserProfile, leads as mockLeads } from "../data/mockData.js";
+import { users as mockUsers, activityLogs as mockActivityLogs, leads as mockLeads } from "../data/mockData.js";
 import { mapLeadResponseToUi } from "./leadService.js";
 import { mapRoleEnumToLabel, mapStatusEnumToLabel } from "../utils/roleMapping.js";
+import { normalizeEmail } from "../utils/validators.js";
 
 function clone(obj) {
   return typeof structuredClone === "function" ? structuredClone(obj) : JSON.parse(JSON.stringify(obj));
@@ -105,7 +106,11 @@ export async function updateUser(id, payload) {
   await mockDelay();
   const idx = mockUsers.findIndex((u) => u.id === id);
   if (idx === -1) throw new ApiError("Không tìm thấy người dùng.", { status: 404 });
-  mockUsers[idx] = { ...mockUsers[idx], ...payload };
+  // Chuẩn hóa email về chữ thường trước khi lưu (Mục IX.2) — trước đây
+  // spread thẳng payload nên "Sửa thông tin" tài khoản lưu nguyên hoa/thường.
+  const normalizedPayload = { ...payload };
+  if (payload.email !== undefined) normalizedPayload.email = payload.email?.trim() ? normalizeEmail(payload.email) : payload.email;
+  mockUsers[idx] = { ...mockUsers[idx], ...normalizedPayload };
   return clone(mockUsers[idx]);
 }
 
@@ -129,17 +134,36 @@ export async function fetchActivityLogs() {
   return clone(mockActivityLogs);
 }
 
-/** GET /api/auth/me chi tiết hồ sơ — dùng cho trang Profile */
-export async function fetchProfile() {
+/**
+ * GET /api/auth/me chi tiết hồ sơ — dùng cho trang Profile.
+ * userId: id của tài khoản ĐANG đăng nhập (lấy từ useAuth() ở UI) — chỉ dùng
+ * cho nhánh mock để tra đúng người dùng hiện tại trong mockUsers; nhánh
+ * Backend thật không cần vì "/auth/me" đã tự xác định qua Bearer token.
+ * BUG ĐÃ SỬA: trước đây hàm này luôn trả về 1 object tĩnh "currentUserProfile"
+ * (hard-code "Tư vấn viên A") nên dù đăng nhập tài khoản nào, trang Profile
+ * cũng chỉ hiện đúng 1 hồ sơ đó.
+ */
+export async function fetchProfile(userId) {
   if (!USE_MOCK) return mapUserResponseToUi(await apiFetch("/auth/me"));
   await mockDelay(300);
-  return clone(currentUserProfile);
+  const found = mockUsers.find((u) => u.id === Number(userId));
+  if (!found) throw new ApiError("Không tìm thấy người dùng.", { status: 404 });
+  return clone(found);
 }
 
-/** PUT /api/users/me — cập nhật hồ sơ cá nhân */
-export async function updateProfile(payload) {
+/**
+ * PUT /api/users/me — cập nhật hồ sơ cá nhân.
+ * userId: xem ghi chú ở fetchProfile() — chỉ cần cho nhánh mock để biết
+ * sửa đúng bản ghi nào trong mockUsers.
+ */
+export async function updateProfile(payload, userId) {
   if (!USE_MOCK) throw new ApiError('Backend chưa có API tự sửa hồ sơ cá nhân ("/users/me").', { status: 501 });
   await mockDelay();
-  Object.assign(currentUserProfile, payload);
-  return clone(currentUserProfile);
+  const idx = mockUsers.findIndex((u) => u.id === Number(userId));
+  if (idx === -1) throw new ApiError("Không tìm thấy người dùng.", { status: 404 });
+  // Chuẩn hóa email về chữ thường trước khi lưu, cùng quy tắc với createLead/updateUser.
+  const normalizedPayload = { ...payload };
+  if (payload.email !== undefined) normalizedPayload.email = payload.email?.trim() ? normalizeEmail(payload.email) : payload.email;
+  mockUsers[idx] = { ...mockUsers[idx], ...normalizedPayload };
+  return clone(mockUsers[idx]);
 }

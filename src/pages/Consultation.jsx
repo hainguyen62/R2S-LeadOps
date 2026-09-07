@@ -12,6 +12,8 @@ export default function Consultation() {
     phone: "",
     email: "",
     course: "",
+    studyGoal: "",          // Mục tiêu học (opsource)
+    expectedEnrollment: "", // Thời gian dự kiến đăng ký (optional)
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -51,8 +53,17 @@ export default function Consultation() {
     e.preventDefault();
     setError("");
 
-    if (!form.fullName.trim() || !form.course) {
-      setError("Đăng ký thất bại: vui lòng nhập họ tên và chọn khóa học.");
+    const missingName = !form.fullName.trim();
+    const missingCourse = !form.course;
+    if (missingName || missingCourse) {
+      // Báo đúng lỗi đang thiếu, tránh hiện gộp cả 2 lỗi khi chỉ thiếu 1 trường.
+      const message =
+        missingName && missingCourse
+          ? "Đăng ký thất bại: vui lòng nhập họ tên và chọn khóa học."
+          : missingName
+            ? "Đăng ký thất bại: vui lòng nhập họ tên."
+            : "Đăng ký thất bại: vui lòng chọn khóa học.";
+      setError(message);
       return;
     }
 
@@ -93,7 +104,8 @@ export default function Consultation() {
         source: "Landing Page",
         phone: form.phone,
         email: form.email,
-        assignee: "Chưa phân công",
+        studyGoal: form.studyGoal || undefined,
+        expectedEnrollment: form.expectedEnrollment || undefined,
       });
 
       setSubmitted(true);
@@ -150,7 +162,7 @@ export default function Consultation() {
                   <button
                     type="button"
                     onClick={() => {
-                      setForm({ fullName: "", phone: "", email: "", course: "" });
+                      setForm({ fullName: "", phone: "", email: "", course: "", studyGoal: "", expectedEnrollment: "" });
                       setSubmitted(false);
                     }}
                     className="rounded-lg border border-emerald-300 bg-white px-4 py-2 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-50"
@@ -235,6 +247,36 @@ export default function Consultation() {
                     Hiện chưa có khóa học nào đang mở. Vui lòng thử lại sau.
                   </p>
                 )}
+
+                <div className="relative">
+                  <BookOpen size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    name="studyGoal"
+                    value={form.studyGoal}
+                    onChange={handleChange}
+                    placeholder="Mục tiêu học (tùy chọn, giúp tính điểm chính xác hơn)"
+                    className={inputBase}
+                  />
+                </div>
+
+                <div className="relative">
+                  <BookOpen size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <select
+                    name="expectedEnrollment"
+                    value={form.expectedEnrollment}
+                    onChange={handleChange}
+                    className={`${inputBase} appearance-none cursor-pointer ${
+                      form.expectedEnrollment ? "text-slate-800" : "text-slate-400"
+                    }`}
+                  >
+                    <option value="">Thời gian dự kiến đăng ký (tùy chọn)</option>
+                    <option value="within1Week">Trong 1 tuần</option>
+                    <option value="within30Days">Trong 1 tháng</option>
+                    <option value="within3Months">Trong 1-3 tháng</option>
+                    <option value="undecided">Chưa xác định</option>
+                  </select>
+                </div>
 
                 {error && (
                   <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">

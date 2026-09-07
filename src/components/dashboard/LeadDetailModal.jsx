@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, Facebook, Send, UserCheck, Flame, Droplet, Maximize2, ChevronDown, Check, Clock, CalendarClock, Loader2 } from "lucide-react";
+import { X, Facebook, Send, UserCheck, Flame, Droplet, Maximize2, ChevronDown, Check, Clock, CalendarClock, Loader2, Users } from "lucide-react";
 import Pill from "../ui/Pill.jsx";
 import Avatar from "../ui/Avatar.jsx";
 import ContactButtons from "../ui/ContactButtons.jsx";
@@ -8,7 +8,9 @@ import { useToast } from "../ui/ToastProvider.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { statusStyle, classStyle, careHistory, leadStatusOrder } from "../../data/mockData.js";
 import { priorityTier, getScoreBreakdown } from "../../utils/leadScoring.js";
-import { addLeadActivity } from "../../services/leadService.js";
+import { addLeadActivity, assignLead } from "../../services/leadService.js";
+import { fetchUsers } from "../../services/settingsService.js";
+import { can } from "../../utils/permissions.js";
 import useEscapeKey from "../../hooks/useEscapeKey.js";
 import { formatVietnamDateTime, vietnamDateTimeToIso } from "../../utils/datetime.js";
 
@@ -46,7 +48,7 @@ const priorityStyles = {
  * không gian cố định bên phải như trước. Chỉ hiển thị khi có `lead`
  * được chọn; đóng bằng nút X, click ra ngoài, hoặc phím Esc.
  */
-export default function LeadDetailModal({ lead, onClose, onRefresh }) {
+export default function LeadDetailModal({ lead, onClose, onRefresh, onAssigned }) {
   const navigate = useNavigate();
   const toast = useToast();
   const user = useAuth();
@@ -55,6 +57,13 @@ export default function LeadDetailModal({ lead, onClose, onRefresh }) {
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [followUpForm, setFollowUpForm] = useState({ datetime: "", note: "" });
   const [savingFollowUp, setSavingFollowUp] = useState(false);
+
+  // ---- Phân công / chuyển người phụ trách (Module 5) ----
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignees, setAssignees] = useState([]);
+  const [assigneesLoading, setAssigneesLoading] = useState(false);
+  const [assignForm, setAssignForm] = useState({ assignee: "", reason: "" });
+  const [assigning, setAssigning] = useState(false);
 
   useEffect(() => {
     if (lead) {
@@ -68,9 +77,10 @@ export default function LeadDetailModal({ lead, onClose, onRefresh }) {
   }, [lead]);
 
   useEscapeKey(followUpOpen, () => setFollowUpOpen(false));
-  // ESC chỉ đóng popup CHI TIẾT khi không có popup con "Đặt lịch follow-up"
-  // đang mở đè lên trên — tránh đóng nhầm cả 2 lớp popup cùng lúc.
-  useEscapeKey(!!lead && !followUpOpen, onClose);
+  useEscapeKey(assignOpen, () => setAssignOpen(false));
+  // ESC chỉ đóng popup CHI TIẾT khi không có popup con nào (follow-up / phân
+  // công) đang mở đè lên trên — tránh đóng nhầm cả 2 lớp popup cùng lúc.
+  useEscapeKey(!!lead && !followUpOpen && !assignOpen, onClose);
 
   if (!lead) return null;
 
@@ -115,6 +125,51 @@ export default function LeadDetailModal({ lead, onClose, onRefresh }) {
       toast.error(err.message || "Lưu lịch follow-up thất bại.");
     } finally {
       setSavingFollowUp(false);
+    }
+  };
+
+  // GET /api/users — chỉ tải danh sách Sales lúc mở modal Phân công, không
+  // tải sẵn từ đầu để tránh gọi API thừa cho những lead không ai bấm vào.
+  const openAssignModal = async () => {
+    setAssignForm({ assignee: "", reason: "" });
+    setAssignOpen(true);
+    setAssigneesLoading(true);
+    try {
+      const users = await fetchUsers();
+      setAssignees(users.filter((u) => u.role === "Sales/Admissions"));
+    } catch {
+      toast.error("Không thể tải danh sách Sales.");
+    } finally {
+      setAssigneesLoading(false);
+    }
+  };
+
+  // PATCH /api/leads/{id}/assignment — xem leadService.js
+  const handleAssign = async (e) => {
+    e.preventDefault();
+    if (!assignForm.assignee) return;
+    const selected = assignees.find((u) => String(u.id) === String(assignForm.assignee));
+    if (!selected) return;
+    if (selected.name === lead.assignee) {
+      setAssignOpen(false);
+      return;
+    }
+    setAssigning(true);
+    try {
+      await assignLead(lead.id, {
+        assignee: selected.name,
+        ownerId: selected.id,
+        reason: assignForm.reason.trim() || undefined,
+        actorName: user?.name,
+      });
+      toast.success(`Đã phân công lead cho ${selected.name}.`);
+      setAssignOpen(false);
+      onRefresh?.(); // load lại chi tiết lead đang mở trong popup này
+      onAssigned?.(); // báo cho Dashboard làm mới các danh sách liên quan (vd. "Lead mới chưa phân công")
+    } catch (err) {
+      toast.error(err.message || "Phân công thất bại.");
+    } finally {
+      setAssigning(false);
     }
   };
 
@@ -182,7 +237,18 @@ export default function LeadDetailModal({ lead, onClose, onRefresh }) {
             </div>
             <div className="flex justify-between items-center gap-3">
               <span className="text-slate-500 shrink-0">Người phụ trách</span>
-              <span className="text-slate-800">{lead.assignee}</span>
+              <span className="flex items-center gap-1.5">
+                <span className="text-slate-800">{lead.assignee || "Chưa phân công"}</span>
+                {can(user, "assignLeads") && (
+                  <button
+                    onClick={openAssignModal}
+                    title="Phân công / chuyển người phụ trách"
+                    className="text-brand-600 hover:text-brand-700 shrink-0"
+                  >
+                    <Users size={13} />
+                  </button>
+                )}
+              </span>
             </div>
           </div>
 
@@ -357,6 +423,70 @@ export default function LeadDetailModal({ lead, onClose, onRefresh }) {
               >
                 {savingFollowUp && <Loader2 size={14} className="animate-spin" />}
                 {savingFollowUp ? "Đang lưu..." : "Lưu lịch follow-up"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
+
+    {/* ---- Modal: Phân công / chuyển người phụ trách (nằm trên popup chi tiết) ---- */}
+    {assignOpen && (
+      <div className="fixed inset-0 z-[60] bg-slate-900/50 flex items-center justify-center p-4">
+        <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-sm shadow-elevated">
+          <div className="flex items-center justify-between px-6 pt-6 pb-2">
+            <h3 className="font-semibold text-slate-900">Phân công lead</h3>
+            <button onClick={() => setAssignOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <X size={18} />
+            </button>
+          </div>
+          <form onSubmit={handleAssign} className="px-6 pb-6 space-y-3">
+            <p className="text-xs text-slate-500">
+              Đang phụ trách: <span className="font-medium text-slate-700">{lead.assignee || "Chưa phân công"}</span>
+            </p>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Phân công cho *</label>
+              {assigneesLoading ? (
+                <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
+                  <Loader2 size={14} className="animate-spin" /> Đang tải danh sách Sales...
+                </div>
+              ) : (
+                <select
+                  value={assignForm.assignee}
+                  onChange={(e) => setAssignForm({ ...assignForm, assignee: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+                >
+                  <option value="">Chọn nhân viên Sales</option>
+                  {assignees.map((u) => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Lý do chuyển (tùy chọn)</label>
+              <input
+                value={assignForm.reason}
+                onChange={(e) => setAssignForm({ ...assignForm, reason: e.target.value })}
+                placeholder="VD: Cân bằng tải, Sales A đang nghỉ..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setAssignOpen(false)}
+                className="flex-1 border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                disabled={assigning || !assignForm.assignee}
+                className="flex-1 bg-brand-600 hover:bg-brand-500 rounded-lg py-2 text-sm text-white disabled:opacity-60 inline-flex items-center justify-center gap-1.5"
+              >
+                {assigning && <Loader2 size={14} className="animate-spin" />}
+                {assigning ? "Đang phân công..." : "Xác nhận phân công"}
               </button>
             </div>
           </form>

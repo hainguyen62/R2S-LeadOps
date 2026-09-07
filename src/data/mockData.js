@@ -503,24 +503,18 @@ export const activityLogs = [
   { id: 5, user: "Tư vấn viên C", action: "Gọi điện cho lead #6", time: "12/05/2026 08:20" },
 ];
 
+// Mỗi user có thêm phone/department/joinedAt để trang Profile hiển thị đúng
+// theo TỪNG tài khoản đang đăng nhập (trước đây trang Profile dùng chung 1
+// object tĩnh "currentUserProfile" nên dù đăng nhập tài khoản nào cũng chỉ
+// thấy hồ sơ của "Tư vấn viên A" — xem services/settingsService.js).
 export const users = [
-  { id: 1, name: "Tư vấn viên A", role: "Sales/Admissions", email: "tva@r2s.edu.vn", status: "Hoạt động" },
-  { id: 2, name: "Tư vấn viên B", role: "Sales/Admissions", email: "tvb@r2s.edu.vn", status: "Hoạt động" },
-  { id: 3, name: "Tư vấn viên C", role: "Sales/Admissions", email: "tvc@r2s.edu.vn", status: "Hoạt động" },
-  { id: 4, name: "Leader Marketing", role: "Leader Marketing", email: "marketing@r2s.edu.vn", status: "Hoạt động" },
-  { id: 5, name: "Admin", role: "Administrator", email: "admin@r2s.edu.vn", status: "Hoạt động" },
-  { id: 6, name: "Marketing Staff", role: "Marketing Staff", email: "staff.marketing@r2s.edu.vn", status: "Hoạt động" },
+  { id: 1, name: "Tư vấn viên A", role: "Sales/Admissions", email: "tva@r2s.edu.vn", status: "Hoạt động", phone: "0901 111 222", department: "Phòng Tuyển sinh", joinedAt: "01/03/2026" },
+  { id: 2, name: "Tư vấn viên B", role: "Sales/Admissions", email: "tvb@r2s.edu.vn", status: "Hoạt động", phone: "0901 222 333", department: "Phòng Tuyển sinh", joinedAt: "15/03/2026" },
+  { id: 3, name: "Tư vấn viên C", role: "Sales/Admissions", email: "tvc@r2s.edu.vn", status: "Hoạt động", phone: "0901 333 444", department: "Phòng Tuyển sinh", joinedAt: "01/04/2026" },
+  { id: 4, name: "Leader Marketing", role: "Leader Marketing", email: "marketing@r2s.edu.vn", status: "Hoạt động", phone: "0902 111 222", department: "Phòng Marketing", joinedAt: "01/02/2026" },
+  { id: 5, name: "Admin", role: "Administrator", email: "admin@r2s.edu.vn", status: "Hoạt động", phone: "0909 000 000", department: "Ban Giám đốc", joinedAt: "01/01/2026" },
+  { id: 6, name: "Marketing Staff", role: "Marketing Staff", email: "staff.marketing@r2s.edu.vn", status: "Hoạt động", phone: "0902 222 333", department: "Phòng Marketing", joinedAt: "10/03/2026" },
 ];
-
-// Người dùng hiện đang đăng nhập (demo) — dùng cho trang Profile
-export const currentUserProfile = {
-  name: "Tư vấn viên A",
-  role: "Sales/Admissions",
-  email: "tva@r2s.edu.vn",
-  phone: "0901 111 222",
-  department: "Phòng Tuyển sinh",
-  joinedAt: "01/03/2026",
-};
 
 // Thông báo (demo) — dùng cho Notification Center
 export const notifications = [
