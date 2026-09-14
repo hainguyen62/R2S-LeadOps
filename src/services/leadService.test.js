@@ -34,7 +34,11 @@ describe("fetchLeads", () => {
   });
 
   it("lọc đúng theo từ khóa tìm kiếm (không tìm thấy trả về mảng rỗng)", async () => {
-    const { items, total } = await fetchLeads({ query: "khong-ton-tai-xyz-123", page: 1, pageSize: 10 });
+    // Lưu ý: KHÔNG dùng chuỗi có chứa chữ số ở đây — fetchLeads() còn hỗ trợ
+    // tìm theo số điện thoại (so khớp phần digit đã chuẩn hóa), nên một chuỗi
+    // như "...-123" có thể vô tình khớp trúng số điện thoại chứa "123" và làm
+    // test sai lệch (đã xảy ra thật với query cũ "khong-ton-tai-xyz-123").
+    const { items, total } = await fetchLeads({ query: "khong-ton-tai-tukhoa-abc", page: 1, pageSize: 10 });
     expect(items).toEqual([]);
     expect(total).toBe(0);
   });
@@ -48,7 +52,7 @@ describe("createLead", () => {
   it("báo lỗi khi không có cả phone lẫn email", async () => {
     await expect(
       createLead({ name: "Test User", course: "ReactJS", source: "Facebook Ads" })
-    ).rejects.toThrow(/Số điện thoại hoặc Email/);
+    ).rejects.toThrow(/số điện thoại hoặc email/i);
   });
 
   it("tạo lead thành công và tự tính điểm/phân loại", async () => {

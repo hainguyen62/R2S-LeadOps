@@ -120,7 +120,7 @@ export async function receiveGoogleFormWebhook(payload = {}) {
   }
 
   // 2) Chống xử lý trùng nếu Google gửi lại đúng 1 responseId
-  if (payload.formResponseId && events.some((e) => e.externalEventId === payload.formResponseId && e.processingStatus === "SUCCESS")) {
+  if (payload.formResponseId && events.some((e) => e.externalEventId === payload.formResponseId && e.processingStatus?.startsWith("SUCCESS"))) {
     baseEvent.processingStatus = "SKIPPED_DUPLICATE_EVENT";
     baseEvent.errorMessage = "Đã xử lý responseId này trước đó — bỏ qua để tránh tạo trùng.";
     saveEvents([baseEvent, ...events]);
