@@ -6,7 +6,52 @@
 // riêng) + 1 nhóm điểm trừ (E). Đây là nguồn dữ liệu DUY NHẤT cho cả
 // hàm tính điểm (scoreLead) lẫn bảng luật hiển thị trên UI
 // (ScoreRulesCard), để không bao giờ lệch nhau.
+//
+// CẤU HÌNH ĐƯỢC (MỚI): điểm từng tiêu chí không còn cố định cứng — Admin/
+// Leader Marketing có thể đổi qua trang "Cấu hình chấm điểm"
+// (pages/ScoringRules.jsx). Thay đổi được lưu ở localStorage (chưa có
+// Back-end thật để lưu dùng chung — xem services/scoringRuleService.js) và
+// áp dụng NGAY cho các lần tính điểm tiếp theo trong cùng trình duyệt.
 // ============================================================
+
+const OVERRIDES_KEY = "r2s_leadops_scoring_overrides_v1";
+
+function loadOverridesRaw() {
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(OVERRIDES_KEY) : null;
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+const CUSTOM_KEY = "r2s_leadops_scoring_custom_v1";
+const DELETED_KEY = "r2s_leadops_scoring_deleted_v1";
+
+function loadJson(key, fallback) {
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveJson(key, value) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // localStorage không khả dụng — bỏ qua.
+  }
+}
+
+function saveOverridesRaw(overrides) {
+  try {
+    window.localStorage.setItem(OVERRIDES_KEY, JSON.stringify(overrides));
+  } catch {
+    // localStorage không khả dụng (SSR, chế độ ẩn danh chặn...) — bỏ qua, dùng điểm mặc định.
+  }
+}
 
 // ---- Nhóm A: Mức độ phù hợp với khóa học (tối đa 25đ) ----
 // Mỗi tiêu chí là một cờ boolean độc lập trong lead.signals.
@@ -91,6 +136,135 @@ export const scoringGroups = [groupA, groupB, groupC, groupD];
 export const deductionGroup = groupE;
 export const scoringMax = 100;
 
+// ---- Áp override đã lưu (nếu có) lên toàn bộ định nghĩa nhóm ----
+// Mutate TRỰC TIẾP vào object groupA..groupE (không tạo bản sao) để mọi nơi
+// đang import { scoringGroups, deductionGroup, groupA... } đều tự thấy giá
+// trị mới ngay khi render lại, không cần sửa các component đang hiển thị.
+function applyOverridesToGroups() {
+  const overrides = loadOverridesRaw();
+  const customs = loadJson(CUSTOM_KEY, []);
+  const deleted = loadJson(DELETED_KEY, []);
+  const groupMap = { A: groupA, C: groupC, D: groupD, E: groupE };
+
+  // Thêm tiêu chí tự tạo (chỉ nhóm A/C/D/E — nhóm B là danh sách mức chọn 1 nên không thêm/xóa).
+  customs.forEach((cr) => {
+    const g = groupMap[cr.groupId];
+    if (g && !g.criteria.some((c) => c.id === cr.id)) {
+      g.criteria.push({ id: cr.id, label: cr.label, points: cr.points, custom: true });
+    }
+  });
+
+  // Ẩn tiêu chí gốc đã bị xóa (xóa mềm — "Khôi phục mặc định" sẽ đưa lại).
+  [groupA, groupC, groupD, groupE].forEach((g) => {
+    g.criteria = g.criteria.filter((c) => !deleted.includes(c.id));
+  });
+
+  [groupA, groupC, groupD, groupE].forEach((group) => {
+    group.criteria.forEach((c) => {
+      const o = overrides[c.id];
+      if (!o) return;
+      if (typeof o.points === "number") c.points = o.points;
+      if (typeof o.active === "boolean") c.active = o.active;
+    });
+  });
+
+  groupB.options.forEach((opt) => {
+    const code = "B:" + opt.value;
+    const o = overrides[code];
+    if (!o) return;
+    if (typeof o.points === "number") opt.points = o.points;
+    if (typeof o.active === "boolean") opt.active = o.active;
+  });
+}
+
+applyOverridesToGroups(); // áp override ngay khi module được load lần đầu
+
+/**
+ * Danh sách phẳng toàn bộ tiêu chí (dùng cho trang Cấu hình chấm điểm) —
+ * mỗi phần tử: { ruleCode, groupCode, groupName, label, points, active }.
+ */
+export function getAllRuleDefs() {
+  const rows = [];
+  [groupA, groupC, groupD, groupE].forEach((group) => {
+    group.criteria.forEach((c) => {
+      rows.push({
+        ruleCode: c.id,
+        groupCode: group.id,
+        groupName: group.id === "E" ? deductionGroup.name : group.name,
+        label: c.label,
+        points: c.points,
+        active: c.active !== false,
+        custom: !!c.custom,
+        deletable: group.id !== "B",
+      });
+    });
+  });
+  groupB.options.forEach((opt) => {
+    rows.push({
+      ruleCode: "B:" + opt.value,
+      groupCode: "B",
+      groupName: groupB.name,
+      label: opt.label,
+      points: opt.points,
+      active: opt.active !== false,
+    });
+  });
+  return rows;
+}
+
+/** Đổi điểm/bật-tắt 1 tiêu chí — lưu vào localStorage và áp dụng ngay. */
+export function updateRuleOverride(ruleCode, { points, active }) {
+  const overrides = loadOverridesRaw();
+  overrides[ruleCode] = {
+    points: typeof points === "number" ? points : overrides[ruleCode]?.points,
+    active: typeof active === "boolean" ? active : overrides[ruleCode]?.active,
+  };
+  saveOverridesRaw(overrides);
+  applyOverridesToGroups();
+  return getAllRuleDefs().find((r) => r.ruleCode === ruleCode);
+}
+
+/** Thêm 1 tiêu chí mới vào nhóm A/C/D/E. Tiêu chí sẽ tự hiện thành checkbox ở LeadDetail. */
+export function addCustomRule({ groupId, label, points }) {
+  if (!["A", "C", "D", "E"].includes(groupId)) throw new Error("Chỉ thêm được tiêu chí vào nhóm A, C, D hoặc E.");
+  const text = (label || "").trim();
+  if (!text) throw new Error("Vui lòng nhập tên tiêu chí.");
+  if (typeof points !== "number" || Number.isNaN(points)) throw new Error("Điểm phải là số nguyên.");
+  const exists = getAllRuleDefs().some((r) => r.label.toLowerCase() === text.toLowerCase());
+  if (exists) throw new Error("Tên tiêu chí đã tồn tại.");
+
+  const customs = loadJson(CUSTOM_KEY, []);
+  const id = "custom_" + Date.now();
+  customs.push({ id, groupId, label: text, points });
+  saveJson(CUSTOM_KEY, customs);
+  applyOverridesToGroups();
+  return getAllRuleDefs().find((r) => r.ruleCode === id);
+}
+
+/** Xóa 1 tiêu chí: tiêu chí tự tạo bị xóa hẳn, tiêu chí gốc bị ẩn (khôi phục được bằng "Khôi phục mặc định"). */
+export function deleteRule(ruleCode) {
+  const customs = loadJson(CUSTOM_KEY, []);
+  if (customs.some((c) => c.id === ruleCode)) {
+    saveJson(CUSTOM_KEY, customs.filter((c) => c.id !== ruleCode));
+    [groupA, groupC, groupD, groupE].forEach((g) => {
+      g.criteria = g.criteria.filter((c) => c.id !== ruleCode);
+    });
+  } else {
+    const deleted = loadJson(DELETED_KEY, []);
+    if (!deleted.includes(ruleCode)) deleted.push(ruleCode);
+    saveJson(DELETED_KEY, deleted);
+    applyOverridesToGroups();
+  }
+}
+
+/** Khôi phục toàn bộ bảng điểm về mặc định gốc (xóa hết override đã lưu). */
+export function resetAllRuleOverrides() {
+  saveJson(CUSTOM_KEY, []);
+  saveJson(DELETED_KEY, []);
+  saveOverridesRaw({});
+  if (typeof window !== "undefined") window.location.reload(); // đơn giản nhất: nạp lại module với giá trị gốc
+}
+
 // Phân loại theo tổng điểm — bao gồm cả mức "Không hợp lệ" theo đúng
 // bảng phân loại trong tài liệu (Mục VII.4).
 export const classificationRules = [
@@ -108,18 +282,18 @@ export const classificationRules = [
 export function scoreLead(lead) {
   const s = (lead && lead.signals) || {};
 
-  const scoreA = groupA.criteria.reduce((sum, c) => sum + (s[c.id] ? c.points : 0), 0);
+  const scoreA = groupA.criteria.reduce((sum, c) => sum + (s[c.id] && c.active !== false ? c.points : 0), 0);
 
   const bOption = groupB.options.find((o) => o.value === s.enrollmentIntent);
-  const scoreB = bOption ? bOption.points : 0;
+  const scoreB = bOption && bOption.active !== false ? bOption.points : 0;
 
-  const rawC = groupC.criteria.reduce((sum, c) => sum + (s[c.id] ? c.points : 0), 0);
+  const rawC = groupC.criteria.reduce((sum, c) => sum + (s[c.id] && c.active !== false ? c.points : 0), 0);
   const scoreC = Math.min(rawC, groupC.max);
 
-  const rawD = groupD.criteria.reduce((sum, c) => sum + (s[c.id] ? c.points : 0), 0);
+  const rawD = groupD.criteria.reduce((sum, c) => sum + (s[c.id] && c.active !== false ? c.points : 0), 0);
   const scoreD = Math.min(rawD, groupD.max);
 
-  const scoreE = groupE.criteria.reduce((sum, c) => sum + (s[c.id] ? c.points : 0), 0);
+  const scoreE = groupE.criteria.reduce((sum, c) => sum + (s[c.id] && c.active !== false ? c.points : 0), 0);
 
   const total = scoreA + scoreB + scoreC + scoreD + scoreE;
   return Math.max(0, Math.min(100, total));
@@ -135,24 +309,24 @@ export function getScoreBreakdown(lead) {
   const items = [];
 
   groupA.criteria.forEach((c) => {
-    if (s[c.id]) items.push({ label: c.label, value: `+${c.points}`, group: "A" });
+    if (s[c.id] && c.active !== false) items.push({ label: c.label, value: `+${c.points}`, group: "A" });
   });
 
   const bOption = groupB.options.find((o) => o.value === s.enrollmentIntent);
-  if (bOption && bOption.points !== 0) {
+  if (bOption && bOption.active !== false && bOption.points !== 0) {
     items.push({ label: bOption.label, value: `${bOption.points > 0 ? "+" : ""}${bOption.points}`, group: "B" });
   }
 
   groupC.criteria.forEach((c) => {
-    if (s[c.id]) items.push({ label: c.label, value: `+${c.points}`, group: "C" });
+    if (s[c.id] && c.active !== false) items.push({ label: c.label, value: `+${c.points}`, group: "C" });
   });
 
   groupD.criteria.forEach((c) => {
-    if (s[c.id]) items.push({ label: c.label, value: `+${c.points}`, group: "D" });
+    if (s[c.id] && c.active !== false) items.push({ label: c.label, value: `+${c.points}`, group: "D" });
   });
 
   groupE.criteria.forEach((c) => {
-    if (s[c.id]) items.push({ label: c.label, value: `${c.points}`, group: "E" });
+    if (s[c.id] && c.active !== false) items.push({ label: c.label, value: `${c.points}`, group: "E" });
   });
 
   return items;

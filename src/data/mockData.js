@@ -463,5 +463,6 @@ export const navItems = [
   { label: "Lịch sử chăm sóc", path: "/history", icon: "History" },
   { label: "Báo cáo", path: "/reports", icon: "BarChart3" },
   { label: "Nguồn tích hợp", path: "/integrations", icon: "Webhook" },
+  { label: "Cấu hình chấm điểm", path: "/scoring-rules", icon: "Target" },
   { label: "Cài đặt", path: "/settings", icon: "Settings" },
 ];

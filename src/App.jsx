@@ -20,6 +20,7 @@ import Consultation from "./pages/Consultation.jsx";
 import Integrations from "./pages/Integrations.jsx";
 import Vouchers from "./pages/Vouchers.jsx";
 import Courses from "./pages/Courses.jsx";
+import ScoringRules from "./pages/ScoringRules.jsx";
 
 /**
  * Chặn truy cập theo route nếu vai trò hiện tại không có quyền (Mục IV).
@@ -76,6 +77,7 @@ export default function App() {
           <Route path="/integrations" element={<RequireAccess><Integrations /></RequireAccess>} />
           <Route path="/vouchers" element={<RequireAccess><Vouchers /></RequireAccess>} />
           <Route path="/courses" element={<RequireAccess><Courses /></RequireAccess>} />
+          <Route path="/scoring-rules" element={<RequireAccess><ScoringRules /></RequireAccess>} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/appointments" element={<MyAppointments />} />
           <Route path="*" element={<Navigate to={getHomePath(user)} replace />} />

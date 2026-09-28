@@ -9,6 +9,7 @@ import {
   Webhook,
   Ticket,
   GraduationCap,
+  Target,
   X,
 } from "lucide-react";
 import { navItems } from "../../data/mockData.js";
@@ -24,6 +25,7 @@ const iconMap = {
   Webhook,
   Ticket,
   GraduationCap,
+  Target,
 };
 
 export default function Sidebar({ open = false, onClose, user }) {

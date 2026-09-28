@@ -129,6 +129,7 @@ export const PAGE_ACCESS = {
   "/integrations": "accessIntegrationsPage",
   "/vouchers": "accessVouchersPage",
   "/courses": "manageCourses",
+  "/scoring-rules": "configureScoring",
   "/profile": true,
 };
 
